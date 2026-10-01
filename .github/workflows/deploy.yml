@@ -1,0 +1,77 @@
+name: build-and-publish
+
+# GitOps CI for the superadmin frontend.
+# Build image -> push to the region ECR (tag = commit SHA) -> bump the image tag
+# on the matching branch of the koronik-eks-gitops manifest repo. ArgoCD deploys.
+on:
+  push:
+    branches: [eks_dev]
+
+permissions:
+  id-token: write # required for AWS OIDC
+  contents: read
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve environment (region / ECR repo / manifest branch)
+        id: env
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "eks_prod" ]; then
+            echo "region=ap-southeast-1"               >> $GITHUB_OUTPUT
+            echo "overlay=prod"                        >> $GITHUB_OUTPUT
+            echo "repo=super_admin_eks_ecr_repo_prod"  >> $GITHUB_OUTPUT
+            echo "mbranch=eks_prod"                    >> $GITHUB_OUTPUT
+            echo "role=koronik-gha-ecr-prod" >> $GITHUB_OUTPUT
+          elif [ "${GITHUB_REF_NAME}" = "eks_dev" ]; then
+            echo "region=us-east-1"                    >> $GITHUB_OUTPUT
+            echo "overlay=dev"                         >> $GITHUB_OUTPUT
+            echo "repo=super_admin_eks_ecr_repo_dev"   >> $GITHUB_OUTPUT
+            echo "mbranch=eks_dev"                     >> $GITHUB_OUTPUT
+            echo "role=koronik-gha-ecr-dev"  >> $GITHUB_OUTPUT
+          else
+            echo "Unsupported branch: ${GITHUB_REF_NAME}"; exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::218085830040:role/${{ steps.env.outputs.role }}
+          aws-region: ${{ steps.env.outputs.region }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Login to Amazon ECR Public (raise base-image pull limits)
+        run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+
+      - name: Build & push image (tag = commit SHA)
+        run: |
+          REG=218085830040.dkr.ecr.${{ steps.env.outputs.region }}.amazonaws.com
+          IMAGE=$REG/${{ steps.env.outputs.repo }}:${GITHUB_SHA}
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Install kustomize
+        run: |
+          curl -sfLo kustomize.tgz \
+            https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz
+          tar -xzf kustomize.tgz && sudo mv kustomize /usr/local/bin/
+
+      - name: Bump image tag in the GitOps manifest repo
+        env:
+          GH_TOKEN: ${{ secrets.MANIFEST_REPO_WRITER_TOKEN }}
+        run: |
+          git clone https://x-access-token:${GH_TOKEN}@github.com/Graaho-Technologies/koronik-eks-gitops.git
+          cd koronik-eks-gitops
+          git checkout ${{ steps.env.outputs.mbranch }}
+          cd apps/superadmin/overlays/${{ steps.env.outputs.overlay }}
+          kustomize edit set image app="${IMAGE}"
+          git config user.name  "arifhossen"
+          git config user.email "arif.hossen@graaho.com"
+          git commit -am "superadmin ${{ steps.env.outputs.overlay }} -> ${GITHUB_SHA}" || echo "no changes"
+          git push
