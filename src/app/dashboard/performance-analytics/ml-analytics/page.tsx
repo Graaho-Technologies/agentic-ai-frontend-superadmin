@@ -6,6 +6,7 @@ import {
   useGetMLMetricsSummaryQuery,
   useGetMLEndpointTimeseriesQuery,
   MLEndpointItem,
+  MLModelUsage,
 } from "@/features/mlAnalytics/mlAnalyticsApi";
 import { useGetAgentsListQuery } from "@/features/performanceAnalytics/performanceAnalyticsApi";
 import { PageHeader, StatCard, ChartCard, SearchableSelect, SearchableSelectOption } from "@/components/performance-analytics/shared";
@@ -36,6 +37,46 @@ const CRITICALITY_COLORS = {
   normal: "bg-gray-100 text-gray-700",
 };
 
+// Format a possibly-missing token count for display.
+const formatNumber = (n?: number | null): string => (n ?? 0).toLocaleString();
+
+// cost_usd arrives as a decimal string or null. Parse to a number, or null if unparseable.
+const parseCost = (c?: string | null): number | null => {
+  if (c === null || c === undefined) return null;
+  const parsed = Number(c);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+// Render a parsed cost (or null) as a dollar figure.
+const formatCost = (n: number | null): string => {
+  if (n === null) return "—";
+  return `$${n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: n > 0 && n < 1 ? 6 : 2,
+  })}`;
+};
+
+// Sum cost across models that carry a parseable cost; null when none do.
+const sumModelCost = (models?: MLModelUsage[]): number | null => {
+  if (!models || models.length === 0) return null;
+  let total = 0;
+  let hasCost = false;
+  for (const m of models) {
+    const cost = parseCost(m.cost_usd);
+    if (cost !== null) {
+      total += cost;
+      hasCost = true;
+    }
+  }
+  return hasCost ? total : null;
+};
+
+// Percentage of `part` out of `whole`, guarding a zero/undefined whole.
+const percent = (part?: number, whole?: number): string => {
+  if (!whole) return "0.0%";
+  return `${(((part ?? 0) / whole) * 100).toFixed(1)}%`;
+};
+
 export default function MLAnalyticsPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
   const [selectedEndpoint, setSelectedEndpoint] = useState<MLEndpointItem | null>(null);
@@ -43,6 +84,19 @@ export default function MLAnalyticsPage() {
     from: "",
     to: "",
   });
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (key: string) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   // Fetch agents list
   const {
@@ -114,11 +168,48 @@ export default function MLAnalyticsPage() {
     }
   };
 
-  // Calculate total tokens from summary
-  const totalTokens = useMemo(() => {
+  // Fallback: sum tokens across endpoints, used when neither overview nor
+  // summary carries a top-level total_tokens.
+  const endpointTokenSum = useMemo(() => {
     if (!summary?.endpoints) return 0;
     return summary.endpoints.reduce((sum, ep) => sum + ep.total_tokens, 0);
   }, [summary]);
+
+  // Token + cost breakdown block. Overview and summary carry identical
+  // values; overview is the page's primary source.
+  const usage = useMemo(() => overview ?? summary, [overview, summary]);
+
+  const totalTokens = useMemo(
+    () => overview?.total_tokens ?? summary?.total_tokens ?? endpointTokenSum,
+    [overview, summary, endpointTokenSum]
+  );
+
+  const modelCostTotal = useMemo(() => sumModelCost(usage?.models), [usage]);
+  const reportedCost = useMemo(() => parseCost(usage?.cost_usd), [usage]);
+  const displayCost = reportedCost ?? modelCostTotal;
+  const models = useMemo(() => usage?.models ?? [], [usage]);
+
+  // Caveats that qualify the cost figure. The ML API leaves cost unattributed
+  // when tokens carry no model, so the figure is not always the full spend.
+  const costNotices = useMemo(() => {
+    const notes: string[] = [];
+    if ((usage?.untracked_tokens ?? 0) > 0) {
+      notes.push(
+        `${formatNumber(usage?.untracked_tokens)} tokens (${percent(usage?.untracked_tokens, totalTokens)} of total) carry no model attribution.`
+      );
+    }
+    if ((usage?.unpriced_requests ?? 0) > 0) {
+      notes.push(`${formatNumber(usage?.unpriced_requests)} requests were not priced.`);
+    }
+    if (reportedCost === null) {
+      notes.push(
+        modelCostTotal !== null
+          ? "The ML API reported no total cost, so the cost shown is the sum of the priced models only."
+          : "The ML API reported no cost for this period."
+      );
+    }
+    return notes;
+  }, [usage, totalTokens, reportedCost, modelCostTotal]);
 
   // Get max response from endpoints
   const maxResponse = useMemo(() => {
@@ -284,9 +375,14 @@ export default function MLAnalyticsPage() {
                     Data Period: {formatDate(overview.date_from)} - {formatDate(overview.date_to)}
                   </span>
                 </div>
-                <span className="text-xs text-purple-600">
-                  {overview.endpoints_tracked} endpoints tracked
-                </span>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-purple-600">
+                    {overview.endpoints_tracked} endpoints tracked
+                  </span>
+                  <span className="text-xs text-purple-600">
+                    Last request: {formatDateTime(overview.last_request_at)}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -332,16 +428,76 @@ export default function MLAnalyticsPage() {
                 description="Maximum response time"
               />
               <StatCard
+                title="Errors"
+                value={overview?.total_errors ?? 0}
+                icon={
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+                  </svg>
+                }
+                color={(overview?.total_errors ?? 0) > 0 ? "red" : "green"}
+                isLoading={overviewLoading || overviewFetching}
+                description={`${((overview?.error_rate ?? 0) * 100).toFixed(2)}% error rate`}
+              />
+            </div>
+          </div>
+
+          {/* Token & Cost Stat Cards */}
+          <div className="px-6 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
                 title="Total Tokens"
-                value={totalTokens.toLocaleString()}
+                value={formatNumber(totalTokens)}
+                icon={
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z"/>
+                  </svg>
+                }
+                color="teal"
+                isLoading={overviewLoading || overviewFetching || summaryLoading || summaryFetching}
+                description="Input + output + untracked"
+              />
+              <StatCard
+                title="Input Tokens"
+                value={formatNumber(usage?.input_tokens)}
+                icon={
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                  </svg>
+                }
+                color="blue"
+                isLoading={overviewLoading || overviewFetching || summaryLoading || summaryFetching}
+                description={`${formatNumber(usage?.cached_input_tokens)} cached (${percent(usage?.cached_input_tokens, usage?.input_tokens)})`}
+              />
+              <StatCard
+                title="Output Tokens"
+                value={formatNumber(usage?.output_tokens)}
+                icon={
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5z"/>
+                  </svg>
+                }
+                color="indigo"
+                isLoading={overviewLoading || overviewFetching || summaryLoading || summaryFetching}
+                description="Generated tokens"
+              />
+              <StatCard
+                title="Est. Cost"
+                value={formatCost(displayCost)}
                 icon={
                   <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z"/>
                   </svg>
                 }
-                color="teal"
-                isLoading={summaryLoading || summaryFetching}
-                description="Total tokens used"
+                color="green"
+                isLoading={overviewLoading || overviewFetching || summaryLoading || summaryFetching}
+                description={
+                  reportedCost !== null
+                    ? "Reported by ML API"
+                    : modelCostTotal !== null
+                    ? "Sum of priced models · partial"
+                    : "Not priced"
+                }
               />
             </div>
           </div>
@@ -376,6 +532,176 @@ export default function MLAnalyticsPage() {
             </div>
           )}
 
+          {/* Token & Cost Breakdown */}
+          <div className="px-6 mt-6">
+            <ChartCard
+              title="Token & Cost Breakdown"
+              description="How this agent's tokens and spend break down for the selected period"
+              isLoading={overviewLoading || overviewFetching || summaryLoading || summaryFetching}
+              isEmpty={!usage}
+            >
+              <div className="space-y-6">
+                {/* Composition bar */}
+                <div>
+                  <div className="flex h-4 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className="bg-blue-500"
+                      style={{ width: percent(usage?.input_tokens, totalTokens) }}
+                      title="Input"
+                    />
+                    <div
+                      className="bg-indigo-500"
+                      style={{ width: percent(usage?.output_tokens, totalTokens) }}
+                      title="Output"
+                    />
+                    <div
+                      className="bg-gray-400"
+                      style={{ width: percent(usage?.untracked_tokens, totalTokens) }}
+                      title="Untracked"
+                    />
+                  </div>
+                  <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>Input
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>Output
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-full bg-gray-400"></span>Untracked
+                    </span>
+                  </div>
+                </div>
+
+                {/* Figures */}
+                <dl className="divide-y divide-gray-100 text-sm">
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="text-gray-600">Input tokens</dt>
+                    <dd className="font-medium text-gray-900">{formatNumber(usage?.input_tokens)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between py-2 pl-4">
+                    <dt className="text-gray-500">of which cached</dt>
+                    <dd className="text-gray-700">
+                      {formatNumber(usage?.cached_input_tokens)}{" "}
+                      <span className="text-gray-400">
+                        ({percent(usage?.cached_input_tokens, usage?.input_tokens)} of input)
+                      </span>
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="text-gray-600">Output tokens</dt>
+                    <dd className="font-medium text-gray-900">{formatNumber(usage?.output_tokens)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="text-gray-600">Untracked tokens</dt>
+                    <dd className="font-medium text-gray-900">
+                      {formatNumber(usage?.untracked_tokens)}{" "}
+                      <span className="text-gray-400 text-xs">
+                        ({percent(usage?.untracked_tokens, totalTokens)} of total)
+                      </span>
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="font-semibold text-gray-900">Total tokens</dt>
+                    <dd className="font-bold text-gray-900">{formatNumber(totalTokens)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="text-gray-600">Cost</dt>
+                    <dd className="font-medium text-gray-900">{formatCost(displayCost)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="text-gray-600">Unpriced requests</dt>
+                    <dd className="font-medium text-gray-900">{formatNumber(usage?.unpriced_requests)}</dd>
+                  </div>
+                </dl>
+
+                {costNotices.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+                    {costNotices.join(" ")}
+                  </div>
+                )}
+              </div>
+            </ChartCard>
+          </div>
+
+          {/* Model Usage Table */}
+          <div className="px-6 mt-6">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">Model Usage</h3>
+                <p className="text-sm text-gray-500">Token consumption and cost per model</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Input Tokens</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cached Input</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Output Tokens</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Tokens</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cost (USD)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {models.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                          No model usage reported for this period.
+                        </td>
+                      </tr>
+                    ) : (
+                      models.map((m) => (
+                        <tr key={m.model}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <code className="text-sm text-gray-900 font-mono">{m.model}</code>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {formatNumber(m.input_tokens)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {formatNumber(m.cached_input_tokens)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {formatNumber(m.output_tokens)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {formatNumber(m.total_tokens)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                            {formatCost(parseCost(m.cost_usd))}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {models.length > 0 && (
+                    <tfoot className="bg-gray-50">
+                      <tr>
+                        <td className="px-6 py-3 text-sm font-semibold text-gray-900">Total</td>
+                        <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">
+                          {formatNumber(models.reduce((sum, m) => sum + m.input_tokens, 0))}
+                        </td>
+                        <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">
+                          {formatNumber(models.reduce((sum, m) => sum + m.cached_input_tokens, 0))}
+                        </td>
+                        <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">
+                          {formatNumber(models.reduce((sum, m) => sum + m.output_tokens, 0))}
+                        </td>
+                        <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">
+                          {formatNumber(models.reduce((sum, m) => sum + m.total_tokens, 0))}
+                        </td>
+                        <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">
+                          {formatCost(modelCostTotal)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          </div>
+
           {/* Endpoint Performance Table */}
           <div className="px-6 mt-6">
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -387,6 +713,7 @@ export default function MLAnalyticsPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th className="px-3 py-3 w-10"></th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Endpoint</th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Method</th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Criticality</th>
@@ -395,13 +722,14 @@ export default function MLAnalyticsPage() {
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Response</th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Max Response</th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tokens</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Last Request</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {summaryLoading || summaryFetching ? (
                       <tr>
-                        <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                        <td colSpan={11} className="px-6 py-8 text-center text-gray-500">
                           <div className="flex items-center justify-center gap-2">
                             <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -413,62 +741,162 @@ export default function MLAnalyticsPage() {
                       </tr>
                     ) : !summary?.endpoints?.length ? (
                       <tr>
-                        <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                        <td colSpan={11} className="px-6 py-8 text-center text-gray-500">
                           No endpoint data available
                         </td>
                       </tr>
                     ) : (
-                      summary.endpoints.map((endpoint) => (
-                        <tr
-                          key={`${endpoint.endpoint}-${endpoint.method}`}
-                          onClick={() => setSelectedEndpoint(endpoint)}
-                          className={`cursor-pointer transition-colors ${
-                            selectedEndpoint?.endpoint === endpoint.endpoint && selectedEndpoint?.method === endpoint.method
-                              ? "bg-purple-50"
-                              : "hover:bg-gray-50"
-                          }`}
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <code className="text-sm text-gray-900 font-mono">{endpoint.endpoint}</code>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <span className={`px-2 py-1 text-xs font-medium rounded ${
-                              endpoint.method === "GET" ? "bg-green-100 text-green-700" :
-                              endpoint.method === "POST" ? "bg-blue-100 text-blue-700" :
-                              endpoint.method === "PUT" ? "bg-yellow-100 text-yellow-700" :
-                              endpoint.method === "DELETE" ? "bg-red-100 text-red-700" :
-                              "bg-gray-100 text-gray-700"
-                            }`}>
-                              {endpoint.method}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <span className={`px-2 py-1 text-xs font-medium rounded capitalize ${CRITICALITY_COLORS[endpoint.criticality]}`}>
-                              {endpoint.criticality}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                            {endpoint.request_count.toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <span className={`text-sm font-medium ${endpoint.error_count > 0 ? "text-red-600" : "text-green-600"}`}>
-                              {endpoint.error_count}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                            {endpoint.avg_response_ms.toFixed(1)}ms
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                            {endpoint.max_response_ms}ms
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                            {endpoint.total_tokens.toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
-                            {formatDateTime(endpoint.last_request_at)}
-                          </td>
-                        </tr>
-                      ))
+                      summary.endpoints.map((endpoint) => {
+                        const key = `${endpoint.endpoint}-${endpoint.method}`;
+                        const isExpanded = expandedKeys.has(key);
+                        const endpointCost = parseCost(endpoint.cost_usd) ?? sumModelCost(endpoint.models);
+                        return (
+                          <React.Fragment key={key}>
+                            <tr
+                              onClick={() => setSelectedEndpoint(endpoint)}
+                              className={`cursor-pointer transition-colors ${
+                                selectedEndpoint?.endpoint === endpoint.endpoint && selectedEndpoint?.method === endpoint.method
+                                  ? "bg-purple-50"
+                                  : "hover:bg-gray-50"
+                              }`}
+                            >
+                              <td className="px-3 py-4 whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleExpanded(key);
+                                  }}
+                                  aria-label={isExpanded ? "Collapse endpoint details" : "Expand endpoint details"}
+                                  aria-expanded={isExpanded}
+                                  className="p-1 rounded hover:bg-gray-200 transition-colors"
+                                >
+                                  <svg
+                                    className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </button>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <code className="text-sm text-gray-900 font-mono">{endpoint.endpoint}</code>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-center">
+                                <span className={`px-2 py-1 text-xs font-medium rounded ${
+                                  endpoint.method === "GET" ? "bg-green-100 text-green-700" :
+                                  endpoint.method === "POST" ? "bg-blue-100 text-blue-700" :
+                                  endpoint.method === "PUT" ? "bg-yellow-100 text-yellow-700" :
+                                  endpoint.method === "DELETE" ? "bg-red-100 text-red-700" :
+                                  "bg-gray-100 text-gray-700"
+                                }`}>
+                                  {endpoint.method}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-center">
+                                <span className={`px-2 py-1 text-xs font-medium rounded capitalize ${CRITICALITY_COLORS[endpoint.criticality]}`}>
+                                  {endpoint.criticality}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
+                                {endpoint.request_count.toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right">
+                                <span className={`text-sm font-medium ${endpoint.error_count > 0 ? "text-red-600" : "text-green-600"}`}>
+                                  {endpoint.error_count}
+                                </span>
+                                <div className="text-xs text-gray-400">
+                                  {(endpoint.error_rate * 100).toFixed(2)}%
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                {endpoint.avg_response_ms.toFixed(1)}ms
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                {endpoint.max_response_ms}ms
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                {endpoint.total_tokens.toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                {formatCost(endpointCost)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
+                                {formatDateTime(endpoint.last_request_at)}
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr key={`${key}-detail`} className="bg-gray-50">
+                                <td colSpan={11} className="px-6 py-4">
+                                  <div className="flex flex-wrap gap-3 mb-3">
+                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2">
+                                      <p className="text-xs text-gray-500 uppercase tracking-wider">Input</p>
+                                      <p className="text-sm font-semibold text-gray-900">{formatNumber(endpoint.input_tokens)}</p>
+                                    </div>
+                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2">
+                                      <p className="text-xs text-gray-500 uppercase tracking-wider">Cached Input</p>
+                                      <p className="text-sm font-semibold text-gray-900">{formatNumber(endpoint.cached_input_tokens)}</p>
+                                    </div>
+                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2">
+                                      <p className="text-xs text-gray-500 uppercase tracking-wider">Output</p>
+                                      <p className="text-sm font-semibold text-gray-900">{formatNumber(endpoint.output_tokens)}</p>
+                                    </div>
+                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2">
+                                      <p className="text-xs text-gray-500 uppercase tracking-wider">Untracked</p>
+                                      <p className="text-sm font-semibold text-gray-900">{formatNumber(endpoint.untracked_tokens)}</p>
+                                    </div>
+                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2">
+                                      <p className="text-xs text-gray-500 uppercase tracking-wider">Total Tokens</p>
+                                      <p className="text-sm font-semibold text-gray-900">{formatNumber(endpoint.total_tokens)}</p>
+                                    </div>
+                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2">
+                                      <p className="text-xs text-gray-500 uppercase tracking-wider">Unpriced Requests</p>
+                                      <p className="text-sm font-semibold text-gray-900">{formatNumber(endpoint.unpriced_requests)}</p>
+                                    </div>
+                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2">
+                                      <p className="text-xs text-gray-500 uppercase tracking-wider">Last Status Code</p>
+                                      <p className="text-sm font-semibold text-gray-900">{endpoint.last_status_code ?? "N/A"}</p>
+                                    </div>
+                                  </div>
+
+                                  {!endpoint.models?.length ? (
+                                    <p className="text-sm text-gray-500">No model usage reported for this endpoint.</p>
+                                  ) : (
+                                    <div className="overflow-x-auto">
+                                      <table className="min-w-full divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
+                                        <thead className="bg-gray-100">
+                                          <tr>
+                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
+                                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Input</th>
+                                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cached</th>
+                                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Output</th>
+                                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                          {endpoint.models.map((m) => (
+                                            <tr key={m.model}>
+                                              <td className="px-4 py-2 text-sm font-mono text-gray-900">{m.model}</td>
+                                              <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatNumber(m.input_tokens)}</td>
+                                              <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatNumber(m.cached_input_tokens)}</td>
+                                              <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatNumber(m.output_tokens)}</td>
+                                              <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatNumber(m.total_tokens)}</td>
+                                              <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatCost(parseCost(m.cost_usd))}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

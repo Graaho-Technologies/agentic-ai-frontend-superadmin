@@ -15,8 +15,30 @@ export const getMlApiBaseUrl = (): string => {
 
 // Types for ML Analytics - Based on actual API responses
 
+// Per-model token + cost usage. cost_usd is a decimal string from the API.
+export interface MLModelUsage {
+  model: string;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: string | null;
+}
+
+// Token accounting + cost, returned on the overview, the summary, and each
+// endpoint row. Optional: the dev ML API may not return these yet.
+export interface MLTokenBreakdown {
+  input_tokens?: number;
+  cached_input_tokens?: number;
+  output_tokens?: number;
+  cost_usd?: string | null;
+  unpriced_requests?: number;
+  untracked_tokens?: number;
+  models?: MLModelUsage[];
+}
+
 // Overview Response
-export interface MLMetricsOverview {
+export interface MLMetricsOverview extends MLTokenBreakdown {
   agent_id: string;
   date_from: string;
   date_to: string;
@@ -26,6 +48,7 @@ export interface MLMetricsOverview {
   avg_response_ms: number;
   last_request_at: string | null;
   endpoints_tracked: number;
+  total_tokens?: number;
   top_endpoint: {
     endpoint: string;
     method: string;
@@ -34,7 +57,7 @@ export interface MLMetricsOverview {
 }
 
 // Endpoint item in summary
-export interface MLEndpointItem {
+export interface MLEndpointItem extends MLTokenBreakdown {
   endpoint: string;
   method: string;
   criticality: "crucial" | "important" | "normal";
@@ -49,11 +72,12 @@ export interface MLEndpointItem {
 }
 
 // Summary Response
-export interface MLMetricsSummary {
+export interface MLMetricsSummary extends MLTokenBreakdown {
   agent_id: string;
   date_from: string;
   date_to: string;
   total_requests: number;
+  total_tokens?: number;
   endpoints: MLEndpointItem[];
 }
 

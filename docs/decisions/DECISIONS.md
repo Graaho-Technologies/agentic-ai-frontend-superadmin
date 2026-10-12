@@ -134,3 +134,37 @@ and duplicating users — which would corrupt the token total, every breakdown, 
 
 **Rules out.** Paging any `users/` scan on a single non-unique sort key. Assuming the server's
 paging guarantees each row is seen exactly once.
+
+---
+
+## 2026-10-12 — A null `cost_usd` from the ML metrics API is never presented as a total cost
+
+**Decision.** On `/dashboard/performance-analytics/ml-analytics`, when the ML API returns
+top-level `cost_usd: null`, the UI shows the sum of `models[].cost_usd` but labels it
+"Sum of priced models · partial" and renders an amber notice naming the untracked tokens.
+`cost_usd` is typed `string | null` and always read through `parseCost`, never as a number.
+
+**Why.** `total_tokens = input_tokens + output_tokens + untracked_tokens`, and the models array
+accounts for only `input + output`. On the prod payload that is 576.6M of 698.3M tokens with no
+model attribution — the backend returns `null` precisely because it cannot price them. Showing
+the $13.35 model sum unqualified would read as the agent's full spend when it covers 17% of its
+tokens.
+
+**Rules out.** Treating the derived model sum as the agent's cost. Coercing `cost_usd` with
+`Number()` at the call site, or typing it as a number — the API sends a decimal string to keep
+precision.
+
+---
+
+## 2026-10-12 — `cached_input_tokens` is a subset of `input_tokens`, not a fourth token bucket
+
+**Decision.** Any token composition view sums only input + output + untracked. Cached input is
+rendered as a nested figure under input with its share of input, never as its own bar segment and
+never added into a total.
+
+**Why.** Verified against the prod payload: `models[].total_tokens` sums to
+`input_tokens + output_tokens` exactly, and `total_tokens - untracked_tokens` equals the same
+number — so the 71.1M cached tokens are already inside the 120.7M input tokens. Counting them
+separately would overstate total usage by 59% of input.
+
+**Rules out.** A four-segment token bar. Any `input + cached + output` arithmetic.

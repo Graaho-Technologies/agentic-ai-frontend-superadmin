@@ -40,6 +40,18 @@ Verified against `src/features/performanceAnalytics/performanceAnalyticsApi.ts` 
   extraOptions)` straight from inside `queryFn` — see `authApi.ts` login/logout and
   `cmsSettingsApi.ts` upload-image for the existing pattern in this repo. Don't use the 4th
   `queryFn` arg (`fetchWithBQ`); none of the existing code does.
+- `mlAnalyticsApi.ts` (`src/features/mlAnalytics/`) is a deliberate exception to the
+  "always reuse `baseQueryWithReauth`" rule above: it talks to a separate ML metrics host
+  (`mlapi.koronik.ai` / `mlapi-dev.koronik.ai`, picked by `getMlApiBaseUrl()` off
+  `NEXT_PUBLIC_ENV`), not the main backend, so it builds its own `fetchBaseQuery` and only
+  borrows `getAccessToken()` for the bearer header. Don't "fix" this to use
+  `baseQueryWithReauth` — it would silently point at the wrong host. Verified 2026-10-12.
+- Forward-compatible field rollout pattern (verified on `mlAnalyticsApi.ts`'s
+  `MLTokenBreakdown`, added 2026-10-12 for a token/cost block the ML API had only just
+  started returning): declare the new fields as an `interface X { field?: T }` with every
+  field optional, then `interface Existing extends X { ... }`. Lets the page read the new
+  fields through `?.` without the whole response type changing shape, and the page cannot
+  crash against a backend/env that hasn't rolled the fields out yet.
 - `GET users/` (`UsersViewSet`) has no `pagination_class`, inherits the project-wide DRF
   default `PageNumberPagination` with `PAGE_SIZE=20`, and has **no**
   `page_size_query_param` — `limit`/`page_size` query params are silently ignored, 20 rows
