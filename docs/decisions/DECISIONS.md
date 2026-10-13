@@ -168,3 +168,36 @@ number — so the 71.1M cached tokens are already inside the 120.7M input tokens
 separately would overstate total usage by 59% of input.
 
 **Rules out.** A four-segment token bar. Any `input + cached + output` arithmetic.
+
+---
+
+## 2026-10-13 — Per-unit money values are sent to the API as exact strings, never `parseFloat`
+
+**Decision.** In the Plan Components form, `cost_per_unit` and `price_per_unit` leave
+`buildSubmitData` as the trimmed string the user typed. Their `<input type="number">` carry
+`step="any"`, and `formatCurrency` renders up to 10 decimal places with a 2-dp floor.
+`quantity` and `discount_percentage` keep `parseFloat` — they are 2-dp fields.
+
+**Why.** `parseFloat('0.000000155')` is `1.55e-7`, and `JSON.stringify` writes that as
+`1.55e-7`; a fixed `step` also makes the browser silently refuse to submit the whole form,
+which is how this surfaced (Create appeared dead, because Cost Per Unit was the first
+step-mismatched field). The request payload types already accepted `number | string | null`,
+so the string costs nothing.
+
+**Rules out.** Putting a fixed `step` back on a money input to get spinner granularity.
+Routing per-unit values through `parseFloat`/`Number()` on the way out. Formatting them
+with a fixed `toFixed(n)` for display — anything finer than `n` renders as `$0.000000`,
+which reads as free. Storage precision is the backend's
+`docs/decisions/DECISIONS.md` 2026-10-13 entry; this repo must not assume 6 dp.
+
+**Addendum, 2026-10-13.** The same rule was applied to the **Override Price** field on
+`AgentComponentPricingManagement.tsx` (it overrides a component's `price_per_unit` per
+agent): `step="any"`, exact-string payload, no fixed-precision display. That file keeps a
+**4-decimal minimum** in `formatPrice` rather than `formatCurrency`'s 2, because 4 was its
+established look — the minimum is per-file; the *maximum* (10, exponent-free) is the rule.
+Deliberately not extracted into a shared util: three local helpers in three components is
+this codebase's existing idiom, and a shared one would have forced a single minimum.
+
+Anything displaying a per-unit price must also tolerate **exponent-form input**:
+`effective_price_per_unit` is serialized from a Python `float`, so `1.55e-07` arrives over
+the wire where the `DecimalField`-backed fields arrive as `"0.0000001550"`.

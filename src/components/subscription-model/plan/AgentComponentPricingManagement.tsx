@@ -80,8 +80,10 @@ const getAdminId = (): string | null => {
 const formatPrice = (price: string | number | null | undefined) => {
   if (price === null || price === undefined) return '$0.0000';
   const num = typeof price === 'string' ? parseFloat(price) : price;
-  if (isNaN(num)) return '$0.0000';
-  return `$${num.toFixed(4)}`;
+  if (!Number.isFinite(num)) return '$0.0000';
+  const [whole, fraction = ''] = num.toFixed(10).split('.');
+  const trimmed = fraction.replace(/0+$/, '').padEnd(4, '0');
+  return `$${whole}.${trimmed}`;
 };
 
 // ============================================
@@ -462,7 +464,7 @@ const DeleteConfirmModal = ({
 export interface AddComponentItem {
   component_id: string;
   total_quantity: number | null;
-  override_price: number | null;
+  override_price: number | string | null;
   is_unlimited: boolean;
 }
 
@@ -594,7 +596,7 @@ const SelectableAddComponentCard = ({
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">$</div>
                 <input
                   type="number"
-                  step="0.000001"
+                  step="any"
                   min="0"
                   value={overrideValue}
                   onChange={(e) => onOverrideChange(e.target.value)}
@@ -698,7 +700,7 @@ const AddComponentModal = ({
     onSubmit(selectedIds.map(id => ({
       component_id: id,
       total_quantity: unlimitedFlags[id] ? null : (quantities[id] ? parseFloat(quantities[id]) : null),
-      override_price: overridePrices[id] ? parseFloat(overridePrices[id]) : null,
+      override_price: overridePrices[id]?.trim() ? overridePrices[id].trim() : null,
       is_unlimited: !!unlimitedFlags[id],
     })));
   };
@@ -1026,7 +1028,7 @@ const EditComponentModal = ({
                     <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</div>
                     <input
                       type="number"
-                      step="0.000001"
+                      step="any"
                       min="0"
                       value={formData.override_price}
                       onChange={(e) => setFormData({ ...formData, override_price: e.target.value })}
@@ -1320,7 +1322,7 @@ const AgentComponentPricingManagement = ({ agentId, embedded = false }: AgentCom
           body: JSON.stringify({
             component_id: selectedComponent.component_id,
             total_quantity: formData.is_unlimited ? null : (formData.total_quantity ? parseFloat(formData.total_quantity) : null),
-            override_price: formData.override_price ? parseFloat(formData.override_price) : null,
+            override_price: formData.override_price.trim() ? formData.override_price.trim() : null,
             is_unlimited: formData.is_unlimited,
           }),
         }

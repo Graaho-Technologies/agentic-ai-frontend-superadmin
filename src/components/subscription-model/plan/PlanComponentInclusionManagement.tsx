@@ -106,7 +106,11 @@ const formatUnitPrice = (price: string | number | null | undefined) => {
   if (price === null || price === undefined) return '$0.00';
   const num = typeof price === 'string' ? parseFloat(price) : price;
   if (isNaN(num)) return '$0.00';
-  if (num !== 0 && Math.abs(num) < 0.01) return `$${num.toFixed(6)}`;
+  if (num !== 0 && Math.abs(num) < 0.01) {
+    const [whole, fraction = ''] = num.toFixed(10).split('.');
+    const trimmed = fraction.replace(/0+$/, '').padEnd(2, '0');
+    return `$${whole}.${trimmed}`;
+  }
   return `$${num.toFixed(2)}`;
 };
 

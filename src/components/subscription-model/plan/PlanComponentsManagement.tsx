@@ -367,8 +367,8 @@ const PlanComponentsManagement = () => {
       description: data.description || null,
       quantity: data.quantity ? parseFloat(data.quantity) : null,
       unit_label: data.unit_label,
-      cost_per_unit: data.cost_per_unit ? parseFloat(data.cost_per_unit) : null,
-      price_per_unit: data.price_per_unit ? parseFloat(data.price_per_unit) : null,
+      cost_per_unit: data.cost_per_unit.trim() ? data.cost_per_unit.trim() : null,
+      price_per_unit: data.price_per_unit.trim() ? data.price_per_unit.trim() : null,
       discount_percentage: data.discount_percentage ? parseFloat(data.discount_percentage) : null,
       promotion_valid_from: data.promotion_valid_from || null,
       promotion_valid_until: data.promotion_valid_until || null,
@@ -443,7 +443,10 @@ const PlanComponentsManagement = () => {
   const formatCurrency = (value: string | number | null | undefined) => {
     if (value === null || value === undefined || value === '') return '$0.00';
     const num = typeof value === 'string' ? parseFloat(value) : value;
-    return `$${num.toFixed(6)}`;
+    if (!Number.isFinite(num)) return '$0.00';
+    const [whole, fraction = ''] = num.toFixed(10).split('.');
+    const trimmed = fraction.replace(/0+$/, '').padEnd(2, '0');
+    return `$${whole}.${trimmed}`;
   };
 
   const formatComponentType = (type: string) => {
@@ -917,7 +920,7 @@ const PlanComponentsManagement = () => {
                         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">$</span>
                         <input
                           type="number"
-                          step="0.000001"
+                          step="any"
                           min="0"
                           value={formData.cost_per_unit}
                           onChange={(e) => setFormData(prev => ({ ...prev, cost_per_unit: e.target.value }))}
@@ -933,7 +936,7 @@ const PlanComponentsManagement = () => {
                         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-500">$</span>
                         <input
                           type="number"
-                          step="0.000001"
+                          step="any"
                           min="0"
                           value={formData.price_per_unit}
                           onChange={(e) => setFormData(prev => ({ ...prev, price_per_unit: e.target.value }))}
@@ -963,7 +966,7 @@ const PlanComponentsManagement = () => {
                         </span>
                         {formData.price_per_unit && formData.quantity && (
                           <p className="text-xs text-emerald-600 mt-1">
-                            ${parseFloat(formData.price_per_unit).toFixed(6)} × {parseFloat(formData.quantity).toLocaleString()}
+                            {formatCurrency(formData.price_per_unit)} × {parseFloat(formData.quantity).toLocaleString()}
                           </p>
                         )}
                       </div>
