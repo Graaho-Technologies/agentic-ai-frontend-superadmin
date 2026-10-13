@@ -1001,7 +1001,7 @@ const PlanAgentInclusionManagement = ({ planId, embedded = false }: PlanAgentInc
       setSuccessMessage('Agent updated successfully!');
     } catch (error: unknown) {
       const apiError = error as ApiErrorResponse;
-      alert(apiError?.data?.detail || apiError?.data?.message || 'Failed to update agent');
+      alert(apiError?.data?.detail || apiError?.data?.error || apiError?.data?.message || 'Failed to update agent');
     }
   };
 
@@ -1014,13 +1014,13 @@ const PlanAgentInclusionManagement = ({ planId, embedded = false }: PlanAgentInc
     try {
       await removeAgent({
         planId: selectedPlanId,
-        agentId: inclusion.agent_pricing?.agent_id ?? '',
+        inclusionId: inclusion.id,
       }).unwrap();
       refetch();
       setSuccessMessage(`"${agentName}" removed from the plan.`);
     } catch (error: unknown) {
       const apiError = error as ApiErrorResponse;
-      alert(apiError?.data?.detail || 'Failed to remove agent from plan');
+      alert(apiError?.data?.detail || apiError?.data?.error || apiError?.data?.message || 'Failed to remove agent from plan');
     } finally {
       setRemovingId(null);
     }

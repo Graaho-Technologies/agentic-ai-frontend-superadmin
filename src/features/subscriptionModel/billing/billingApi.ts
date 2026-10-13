@@ -996,16 +996,17 @@ export const billingApi = createApi({
       ],
     }),
 
-    removeAgentFromPlan: builder.mutation<void, { planId: string; agentId: string }>({
-      query: ({ planId, agentId }) => {
+    removeAgentFromPlan: builder.mutation<void, { planId: string; inclusionId: string }>({
+      query: ({ planId, inclusionId }) => {
         const adminId = getAdminId();
         return {
-          url: `/plans/${planId}/agents/${agentId}/?admin_id=${adminId}`,
+          url: `/plans/${planId}/agents/${inclusionId}/?admin_id=${adminId}`,
           method: 'DELETE',
         };
       },
-      invalidatesTags: (result, error, { planId }) => [
+      invalidatesTags: (result, error, { planId, inclusionId }) => [
         { type: 'Plan', id: planId },
+        { type: 'PlanAgentInclusion', id: inclusionId },
         { type: 'PlanAgentInclusion', id: 'LIST' },
         { type: 'PlanSummary', id: planId },
       ],

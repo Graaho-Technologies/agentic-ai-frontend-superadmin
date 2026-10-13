@@ -201,3 +201,26 @@ this codebase's existing idiom, and a shared one would have forced a single mini
 Anything displaying a per-unit price must also tolerate **exponent-form input**:
 `effective_price_per_unit` is serialized from a Python `float`, so `1.55e-07` arrives over
 the wire where the `DecimalField`-backed fields arrive as `"0.0000001550"`.
+
+---
+
+## 2026-10-13 — Plan child routes are addressed by the **inclusion** id, not the child entity's id
+
+**Decision.** Every call to `/plans/{plan_id}/agents/{...}/` and
+`/plans/{plan_id}/components/{...}/` puts the **join row's** id in the final segment —
+`PlanAgentInclusion.id` / `PlanComponentInclusion.id` — never `agent_id`, `agent_pricing.id`,
+or `component.id`. RTK Query arguments for these endpoints are named `inclusionId` so the
+call site cannot read as correct while being wrong.
+
+**Why.** The backend resolves them that way
+(`subscriptions/views/subscription_views.py:1047` and `:828`, both
+`Inclusion.objects.get(id=<segment>, plan=plan)`). `removeAgentFromPlan` named its argument
+`agentId` and was duly handed `agent_pricing.agent_id`; every request 404'd and the Remove
+button silently did nothing for however long it had shipped. The sibling endpoints on the
+same URL shape had it right, so nothing but the name made the wrong value plausible.
+
+**Rules out.** Naming one of these arguments after the child entity. Reaching for
+`agent_pricing.agent_id` / `component.id` when building one of these URLs. Swallowing the
+response body on failure: these endpoints return their message under `error`, not `detail`,
+so a `detail`-only fallback turns a precise 404 into "something went wrong" — read
+`detail || error || message`.
