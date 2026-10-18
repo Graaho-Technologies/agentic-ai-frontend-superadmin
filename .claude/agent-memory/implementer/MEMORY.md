@@ -7,3 +7,4 @@
 - [RTK Query conventions](rtk-query-conventions.md) — createApi slice shape and store registration.
 - [Agent template drawer](agent-template-drawer.md) — SuperAdminCreateAgentTemplateDrawer.tsx's 4-site FormData sync trap and agentTemplateApi.ts's duplicated template-shape surface.
 - [Progressive loading pattern](progressive-loading-pattern.md) — split cheap-query gating from expensive-query per-section pending/error notes; collapsed `<details>` for audit text on non-technical pages.
+- [Org management UI](org-management-ui.md) — three-pane org/instance/config picker, comma-list input trap, org-by-sub_id inference + escape hatch.

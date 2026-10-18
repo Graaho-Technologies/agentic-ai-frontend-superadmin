@@ -38,8 +38,20 @@ Verified against `src/features/performanceAnalytics/performanceAnalyticsApi.ts` 
 - For a `queryFn`-based endpoint that must call the raw base query directly (bypass another
   endpoint's own `query`/`transformResponse`), call `baseQueryWithReauth(args, api,
   extraOptions)` straight from inside `queryFn` — see `authApi.ts` login/logout and
-  `cmsSettingsApi.ts` upload-image for the existing pattern in this repo. Don't use the 4th
-  `queryFn` arg (`fetchWithBQ`); none of the existing code does.
+  `cmsSettingsApi.ts` upload-image for that pattern. A second, equally valid pattern now
+  also exists in this repo: use the 4th `queryFn` arg (`fetchWithBQ`, RTK Query's own name
+  for the bound base query) instead of importing `baseQueryWithReauth` directly — see
+  `orgManagementApi.ts`'s `getAllWorkspaces`/`getAllAgentInstances` (added 2026-10-18),
+  which both walk `?page=N` until the backend returns `next: null`, capped at 50 pages as a
+  backstop against a pagination regression. Either form works identically since the slice's
+  `baseQuery` *is* `baseQueryWithReauth`; pick whichever the task packet specifies, don't
+  "fix" one to match the other.
+- Tolerant-parse pattern for a free-form/un-validated backend column read back into a typed
+  shape: a `parse*` function that never throws — wrap `JSON.parse` in try/catch, validate
+  the parsed shape by hand, and return `{ value, error: string | null }` rather than
+  throwing on a malformed stored value. See `src/features/orgManagement/domainLexicon.ts`
+  (`parseDomainLexicon`), added 2026-10-18 for an admin-edited JSON-string column with no
+  backend validation.
 - `mlAnalyticsApi.ts` (`src/features/mlAnalytics/`) is a deliberate exception to the
   "always reuse `baseQueryWithReauth`" rule above: it talks to a separate ML metrics host
   (`mlapi.koronik.ai` / `mlapi-dev.koronik.ai`, picked by `getMlApiBaseUrl()` off

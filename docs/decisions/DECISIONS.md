@@ -224,3 +224,66 @@ same URL shape had it right, so nothing but the name made the wrong value plausi
 response body on failure: these endpoints return their message under `error`, not `detail`,
 so a `detail`-only fallback turns a precise 404 into "something went wrong" — read
 `detail || error || message`.
+
+---
+
+## 2026-10-18 — Org Management narrows instances to an organization **client-side**, via `user_sub_id`
+
+**Decision.** `/dashboard/org-management` lists every agent instance (`GET agent-instances/`,
+which for a superadmin is unfiltered) and decides which belong to the selected organization in
+the browser: an instance is in-org when its `user_sub_id` is the `sub_id` of a member returned
+by `GET workspaces/<id>/members/`. The pane carries a permanent **"All instances"** toggle and
+an explicit escape hatch when the match set is empty.
+
+**Why.** The backend offers no server-side alternative today. `AgentInstancesViewSet`
+(`agent_management/views/agent_instance_views.py:337`) has `filterset_fields = ["is_active",
+"template", "instance_created_by", "user_sub_id", "created_at"]` — no `organization`. Org scope
+is derived from the **JWT actor** in `get_queryset` (`:468-480`), and for a superadmin that
+branch is `pass` — all instances, every org. `admin_sub_id` is accepted but inert (`:496-498`);
+it is **not** a filter, so `getAgentInstancesByAdminId` in `agentTemplateApi.ts:949` does not
+narrow anything for a superadmin. The real link, `instance_created_by → Users.organization`, is
+absent from `AgentInstanceListSerializer` (`agent_instances.py:685-710`), so it cannot be used
+client-side either.
+
+**Rules out.** Believing `?admin_sub_id=` or `?organization=` filters the instance list. Treating
+the `user_sub_id` match as authoritative — it is an inference (`user_sub_id` is nullable, and
+workspace membership may be incomplete), which is why the escape hatch is load-bearing and must
+not be removed. The clean fix is a backend change — add `organization` to `filterset_fields` and
+filter on `instance_created_by__organization_id` — after which this page should switch to it.
+
+---
+
+## 2026-10-18 — "Organization" in Org Management means **Workspace**, not the RBAC `Organization`
+
+**Decision.** The org picker on `/dashboard/org-management` is fed by `GET workspaces/`, not by
+`GET rbac/organizations/` which backs the Module Access page.
+
+**Why.** They are two different models. `Organization` (`apps/organizations/models.py:27`) is
+`id` + `name` only, and **no endpoint exposes its members**, so it cannot be walked to a set of
+`sub_id`s. `Workspace` (`apps/agents/models/workspaces.py:11`) has `GET workspaces/<id>/members/`,
+which returns users with `sub_id` — the only field that joins to an agent instance. Picking the
+RBAC `Organization` would have forced a fuzzy match on the denormalized `Users.organization_name`.
+
+**Rules out.** Assuming the two pages' org ids are interchangeable — a `rbac/organizations/` id
+will not resolve against `workspaces/`, and vice versa. Reaching for `rbac/organizations/` here
+without first adding a members endpoint to it.
+
+---
+
+## 2026-10-18 — `dynamic_config` writes send only the keys they own
+
+**Decision.** `PATCH agent-instances/<id>/update-config/` is called with
+`{ dynamic_config: { domain_lexicon, directory_enabled } }` and **no `admin_sub_id`**.
+`domain_lexicon` is written as a JSON **string**; readers go through `parseDomainLexicon`, which
+accepts a string or an array.
+
+**Why.** The view top-level **shallow-merges** (`existing_dynamic.update(dynamic_config)`,
+`agent_instance_views.py:1223-1226`), so omitted keys survive but any key sent replaces its value
+wholesale — there is no deep merge. `admin_sub_id` is never read by this action. The string
+encoding matches the reference Postman request; `domain_lexicon` and `directory_enabled` appear
+**nowhere** in the Django source, so the column is free-form, un-validated, and whatever shape we
+write is the shape its downstream consumer gets.
+
+**Rules out.** Sending a whole reconstructed `dynamic_config` (it would clobber sibling keys such
+as the IDP feature's `field_mappings` / `sample_pdf_url`). Expecting the backend to validate,
+coerce, or deep-merge these keys. Assuming a nested key can be patched on its own.

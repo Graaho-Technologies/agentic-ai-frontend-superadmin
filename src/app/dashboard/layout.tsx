@@ -15,6 +15,7 @@ const NAV_ROUTES = {
   workspaces: `${BASE}/workspaces`,
   demoUsers: `${BASE}/demo-users`,
   moduleAccess: `${BASE}/module-access`,
+  orgManagement: `${BASE}/org-management`,
   performanceAnalytics: {
     overview: `${BASE}/performance-analytics`,
     responseTime: `${BASE}/performance-analytics/response-time`,
@@ -213,6 +214,14 @@ export default function DashboardLayout({
                 <path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1M10 17L6 13L7.41 11.59L10 14.17L16.59 7.58L18 9L10 17Z"/>
               </svg>
               <span className="font-medium">Module Access</span>
+            </Link>
+
+            {/* Org Management */}
+            <Link href={NAV_ROUTES.orgManagement} className={linkCls(NAV_ROUTES.orgManagement)}>
+              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
+              </svg>
+              <span className="font-medium">Org Management</span>
             </Link>
 
             {/* Performance Analytics */}
