@@ -76,3 +76,26 @@ Verified against `src/features/performanceAnalytics/performanceAnalyticsApi.ts` 
   org-scoped actor → their org only) *after* query-param filtering, so two different pages
   hitting the same filtered `users/` endpoint as the same actor are guaranteed to agree —
   useful when a ticket requires two UIs to show a provably consistent number.
+- `getBaseUrl()` in `src/lib/api/baseQueryWithAuth.ts` throws when
+  `NEXT_PUBLIC_API_BASE_URL` is unset. As of 2026-10-19 it is called **only** at call time
+  (components in `src/components/subscription-model/plan/` read `process.env` directly and
+  separately). Every module-scope `fetchBaseQuery({ baseUrl: ... })` in the repo instead uses
+  the sibling `resolveBaseUrl()` (also exported from `baseQueryWithAuth.ts`), which logs and
+  returns `''` instead of throwing — required at **four** call sites:
+  `baseQueryWithAuth.ts` itself (`baseQueryWithAuth`, `baseQueryWithoutAuth`), plus
+  `src/features/auth/authApi.ts` (`djangoBaseQuery`), `src/features/fileApi.ts`
+  (`baseQueryForFileUpload`), and `src/features/cmsSettings/cmsSettingsApi.ts`
+  (`baseQueryForUpload`). Reason this matters beyond style: `src/store.ts` imports every
+  feature API unconditionally and the dashboard layout wraps every page in the Redux
+  `Provider`, so prerendering **any** dashboard page during `next build` pulls in all four
+  call sites transitively — a single remaining `getBaseUrl()` at module scope anywhere in that
+  import graph crashes the whole build, on whichever page happens to be processed first, which
+  may look unrelated to the file actually at fault. Verified 2026-10-19 by reproducing
+  `env -u NEXT_PUBLIC_API_BASE_URL npx next build` in an isolated `.env`-free copy: with only
+  `baseQueryWithAuth.ts` patched the build still failed (on
+  `/dashboard/performance-analytics/slow-requests`, not the originally-reported page); after
+  all four call sites were switched to `resolveBaseUrl()` the build passed, exit 0, all 32
+  routes generated. **Any new RTK Query file that builds its own `fetchBaseQuery` at module
+  scope must import `resolveBaseUrl`, never `getBaseUrl`** — grep `getBaseUrl` across `src/`
+  to confirm only the definition in `baseQueryWithAuth.ts` remains before trusting a "fixed"
+  claim for this bug. Full history: `docs/changelogs/2026-10-19-docker-build-next-public-env.md`.

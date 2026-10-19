@@ -14,7 +14,7 @@ import {
   setTokens,
   clearTokens,
   setStoredUser,
-  getBaseUrl
+  resolveBaseUrl
 } from '@/lib/api/baseQueryWithAuth';
 
 // Fix: Make all body properties optional and add country
@@ -267,7 +267,7 @@ const amplifyBaseQuery: BaseQueryFn<AuthArgs, AuthResult, AuthError> = async (ar
 
 // Django baseQuery for admin authentication
 const djangoBaseQuery = fetchBaseQuery({
-  baseUrl: getBaseUrl(),
+  baseUrl: resolveBaseUrl(),
   prepareHeaders: (headers) => {
     headers.set('Content-Type', 'application/json');
     return headers;

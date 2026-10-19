@@ -1,6 +1,6 @@
 // src/features/files/fileApi.tss
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { getBaseUrl, getAccessToken } from '@/lib/api/baseQueryWithAuth';
+import { resolveBaseUrl, getAccessToken } from '@/lib/api/baseQueryWithAuth';
 
 export interface FileExtractResponse {
   text: string;
@@ -12,7 +12,7 @@ export interface FileExtractResponse {
 
 // Custom base query for file uploads (FormData)
 const baseQueryForFileUpload = fetchBaseQuery({
-  baseUrl: getBaseUrl(),
+  baseUrl: resolveBaseUrl(),
   mode: 'cors',
   credentials: 'include',
   prepareHeaders: (headers) => {

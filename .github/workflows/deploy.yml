@@ -26,12 +26,16 @@ jobs:
             echo "repo=super_admin_eks_ecr_repo_prod"  >> $GITHUB_OUTPUT
             echo "mbranch=eks_prod"                    >> $GITHUB_OUTPUT
             echo "role=koronik-gha-ecr-prod" >> $GITHUB_OUTPUT
+            echo "api_url=${{ vars.NEXT_PUBLIC_API_BASE_URL_PROD }}" >> $GITHUB_OUTPUT
+            echo "app_env=prod"                        >> $GITHUB_OUTPUT
           elif [ "${GITHUB_REF_NAME}" = "eks_dev" ]; then
             echo "region=us-east-1"                    >> $GITHUB_OUTPUT
             echo "overlay=dev"                         >> $GITHUB_OUTPUT
             echo "repo=super_admin_eks_ecr_repo_dev"   >> $GITHUB_OUTPUT
             echo "mbranch=eks_dev"                     >> $GITHUB_OUTPUT
             echo "role=koronik-gha-ecr-dev"  >> $GITHUB_OUTPUT
+            echo "api_url=${{ vars.NEXT_PUBLIC_API_BASE_URL_DEV }}" >> $GITHUB_OUTPUT
+            echo "app_env=dev"                         >> $GITHUB_OUTPUT
           else
             echo "Unsupported branch: ${GITHUB_REF_NAME}"; exit 1
           fi
@@ -50,9 +54,18 @@ jobs:
 
       - name: Build & push image (tag = commit SHA)
         run: |
+          API_URL="${{ steps.env.outputs.api_url }}"
+          if [ -z "$API_URL" ]; then
+            echo "::error::GitHub repo variable NEXT_PUBLIC_API_BASE_URL_${{ steps.env.outputs.overlay }} (uppercase) is not set. Add it under Settings -> Secrets and variables -> Actions -> Variables."
+            exit 1
+          fi
+
           REG=218085830040.dkr.ecr.${{ steps.env.outputs.region }}.amazonaws.com
           IMAGE=$REG/${{ steps.env.outputs.repo }}:${GITHUB_SHA}
-          docker build -t "$IMAGE" .
+          docker build \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="$API_URL" \
+            --build-arg NEXT_PUBLIC_ENV="${{ steps.env.outputs.app_env }}" \
+            -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 

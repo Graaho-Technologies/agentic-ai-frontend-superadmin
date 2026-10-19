@@ -1,6 +1,6 @@
 // src/features/cmsSettings/cmsSettingsApi.ts
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { baseQueryWithReauth, getBaseUrl, getAccessToken } from '@/lib/api/baseQueryWithAuth';
+import { baseQueryWithReauth, resolveBaseUrl, getAccessToken } from '@/lib/api/baseQueryWithAuth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -101,7 +101,7 @@ export interface ByPageTypeResponse {
 // ─── Custom base query for file uploads ──────────────────────────────────────
 
 const baseQueryForUpload = fetchBaseQuery({
-  baseUrl: getBaseUrl(),
+  baseUrl: resolveBaseUrl(),
   mode: 'cors',
   credentials: 'include',
   prepareHeaders: (headers) => {

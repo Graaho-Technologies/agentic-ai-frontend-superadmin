@@ -242,10 +242,22 @@ export const getBaseUrl = (): string => {
   return baseUrl;
 };
 
+// Module-scope safe variant: never throws, so importing this module during
+// `next build` prerendering cannot fail when the var is absent. A missing value
+// surfaces as a failed request at call time rather than a build crash.
+export const resolveBaseUrl = (): string => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!baseUrl) {
+    console.error('NEXT_PUBLIC_API_BASE_URL is not set - API requests will fail');
+    return '';
+  }
+  return baseUrl;
+};
+
 // ─── Base Query with Authentication ───────────────────────────────────────────
 
 export const baseQueryWithAuth = fetchBaseQuery({
-  baseUrl: getBaseUrl(),
+  baseUrl: resolveBaseUrl(),
   mode: 'cors',
   // NOTE: credentials omitted - using JWT Bearer token, not cookies
   // This prevents 431 errors from accumulated cookies
@@ -364,7 +376,7 @@ export const baseQueryWithReauth: BaseQueryFn<
 // ─── Base Query without Auth (for public endpoints) ──────────────────────────
 
 export const baseQueryWithoutAuth = fetchBaseQuery({
-  baseUrl: getBaseUrl(),
+  baseUrl: resolveBaseUrl(),
   mode: 'cors',
   // NOTE: credentials omitted - using JWT Bearer token, not cookies
   prepareHeaders: (headers) => {

@@ -287,3 +287,34 @@ write is the shape its downstream consumer gets.
 **Rules out.** Sending a whole reconstructed `dynamic_config` (it would clobber sibling keys such
 as the IDP feature's `field_mappings` / `sample_pdf_url`). Expecting the backend to validate,
 coerce, or deep-merge these keys. Assuming a nested key can be patched on its own.
+
+---
+
+## 2026-10-19 — `NEXT_PUBLIC_*` reaches the Docker image via build args, not runtime injection; module-scope base-URL resolution must never throw
+
+**Decision.** `docker build` now accepts `NEXT_PUBLIC_API_BASE_URL` (required) and six other
+`NEXT_PUBLIC_*` values (optional) as Docker build args, promoted to `ENV` before `npm run build`
+in the builder stage only, with a `RUN test -n "$NEXT_PUBLIC_API_BASE_URL" || exit 1` guard.
+`.github/workflows/deploy.yml` sources the required value from a per-environment GitHub
+repository variable (`NEXT_PUBLIC_API_BASE_URL_DEV` / `_PROD`) and passes it with
+`--build-arg`. Separately, every module-scope `fetchBaseQuery({ baseUrl: ... })` in this repo
+must resolve the base URL through a non-throwing accessor (`resolveBaseUrl()` in
+`src/lib/api/baseQueryWithAuth.ts`), never the throwing `getBaseUrl()` — that rule applies to
+**any** file that builds its own `fetchBaseQuery` at module scope, not just the one the bug was
+first reported against.
+
+**Why.** `next build` inlines `NEXT_PUBLIC_*` values into the client bundle at build time;
+setting them on the running container has no effect on an already-compiled bundle, so runtime
+injection cannot fix a missing value after the fact. Separately, `getBaseUrl()` threw when the
+var was unset, and it was being called at module scope in **four** places
+(`baseQueryWithAuth.ts` ×2, `authApi.ts`, `fileApi.ts`, `cmsSettingsApi.ts`) — `store.ts` imports
+every feature API unconditionally and the dashboard layout wraps every page in the Redux
+`Provider`, so prerendering *any* dashboard page pulled in all four throw sites regardless of
+which page was actually being rendered. Fixing only the first-reported file left the build
+failing on a different, seemingly unrelated page.
+
+**Rules out.** Runtime env injection (ConfigMap/Secret/k8s env) as a fix for missing
+`NEXT_PUBLIC_*` values — it cannot work, by how Next.js inlines these at build time. Committing
+`.env`/`.env.*` into the image to work around the missing build args — `.dockerignore` correctly
+excludes them and that exclusion was not touched. Treating the bug as fixed after patching a
+single file without grepping for every other module-scope `getBaseUrl()` call site.
