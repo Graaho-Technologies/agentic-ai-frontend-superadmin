@@ -1,6 +1,6 @@
 ---
 name: backend-rbac-repo
-description: Sibling Django backend repo (graaho-ai-agent-backend) RBAC app layout, test/migration commands, and environment traps hit while implementing org-level module caps and superadmin-only permission lockdown.
+description: Sibling Django backend repo (graaho-ai-agent-backend) RBAC app layout, test/migration commands, and environment traps hit while implementing org-level module caps, superadmin-only permission lockdown, and the agent_instance_views.py subscription/plan-cap gate.
 metadata:
   type: project
 ---
@@ -61,6 +61,37 @@ attributed to you or hide your own diff. Reconfirmed 2026-09-08: `logs/api-reque
 files were deleted mid-session by something outside any tool call I made (a log
 rotation/cleanup process apparently runs against this checkout independently) — don't stage or
 revert unexplained changes outside your read-write set, just note them in the report.
+
+**Re-verified 2026-10-19 on branch `eks_dev`** (not `koronik-develop` — branch in this repo
+has moved on since the 2026-09-07/08 notes above; check `git branch --show-current` before
+trusting a branch name from an older memory entry here). `pytest.ini`'s `testpaths` is now
+`apps` (all apps), not `apps/agents/tests` alone — the 2026-09-07 "pytest collects NOTHING
+unless you name explicit paths" trap no longer applies on this branch, though naming
+explicit paths (e.g. `apps/agent_management/ apps/agents/tests/test_plans.py`) is still
+the right move for a scoped verification run. `venv/bin/python manage.py makemigrations
+--check --dry-run --settings=config.settings` still needs the explicit `--settings` flag
+and works cleanly (prints a model-import summary, then "No changes detected").
+`apps/agent_management/tests/` is plain `django.test.TestCase` + `APIClient` (house style,
+one module per defect/feature, docstring explaining the defect) — do not reach for
+`apps/agents/tests/conftest.py`'s pytest fixtures there, they don't apply; read two existing
+files in the target directory for the user/template/instance-building helper pattern
+(`_make_user`/`_make_template`/`_make_instance`, all free functions, not fixtures) instead.
+
+**`AgentInstancesViewSet.create`'s subscription gate** (`apps/agent_management/views/agent_instance_views.py`,
+around `:708-860`) is the one place that actually enforces plan limits at instance creation:
+whitelist bypass → free-tier branch → `elif subscription:` paid-plan branch (`if plan:` reads
+`PlanAgentInclusion`, `else:` custom-plan reads `SubscriptionAgent`) → `else:` 402. Only the
+`if plan:` sub-branch reads `Plan.max_agents_allowed` (added 2026-10-19, see
+`docs/changelogs/2026-10-19-plan-max-agents-enforcement.md` in that repo) — `change_plan`,
+`force_activate` (`apps/subscriptions/views/subscription_views.py`), and
+`aws_marketplace_service.py`'s `_copy_plan_to_subscription` all copy **every**
+`PlanAgentInclusion` row into `SubscriptionAgent` unconditionally (no `max_agents_allowed`
+check), but `SubscriptionAgent` is never read by the standard-plan (`if plan:`) entitlement
+path anyway — it only matters for custom plans (`plan is None`). A test that needs a template
+to pass `AgentAssignmentChecker.can_admin_create_instances_from_template` without wiring up
+`AgentTemplateAssignment` can just set the template's `created_by` to a `role='superadmin'`
+user — `apps/agents/utils/permissions.py` auto-grants access to any template created by a
+superadmin, regardless of the acting admin's own role.
 
 **Read-only anchor test files can encode the exact behavior a packet tells you to remove
 (2026-09-08):** a packet asked me to replace `PermissionResolver.get_user_permissions`'s

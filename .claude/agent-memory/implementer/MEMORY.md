@@ -9,3 +9,5 @@
 - [Progressive loading pattern](progressive-loading-pattern.md) — split cheap-query gating from expensive-query per-section pending/error notes; collapsed `<details>` for audit text on non-technical pages.
 - [Org management UI](org-management-ui.md) — three-pane org/instance/config picker, comma-list input trap, org-by-sub_id inference + escape hatch.
 - [Lucide icon replacement](lucide-icon-replacement.md) — lucide-react pinned to 1.59.0; `Building2` is `BuildingComplex` here; verify names against the installed `.d.ts`, not docs.
+- [Plan drawer field sync](plan-drawer-field-sync.md) — CreateEditPlanDrawer.tsx needs any new field in 3 places (init/reset/edit-hydration); use `?? 0` not `|| 0` for real-zero fields.
+- [Agent-limit modal wording](agent-limit-modal-wording.md) — org-facing repo's two 402 modals; backend's instance-limit `message` text doesn't match the frontend's hardcoded fallback, so gate message-rendering on `isAgentLimit` too.

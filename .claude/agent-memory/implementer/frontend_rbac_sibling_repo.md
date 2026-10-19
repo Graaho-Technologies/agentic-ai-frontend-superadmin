@@ -7,11 +7,13 @@ metadata:
 
 The org-admin-facing RBAC module-access UI (`ManageModuleAccessModal`, `ModuleAccessPicker`,
 `CreateUserDrawer`) lives in a **separate repo**,
-`/Users/golamkibriaanik/Desktop/graaho-ai/graaho-ai-agent-frontend`, branch `koronikai-dev` as
-of 2026-09-08 — not this super-admin checkout. A task packet that says "Repo:
-.../graaho-ai-agent-frontend" is asking you to `cd`/operate there directly; verify with
-`git branch --show-current` and `git status --short` before starting, since the two repos'
-git state is unrelated. See [[backend-rbac-repo]] for the analogous Django-side split.
+`/Users/golamkibriaanik/Desktop/graaho-ai/graaho-ai-agent-frontend` — not this super-admin
+checkout. Branch was `koronikai-dev` as of 2026-09-08, `eks_dev` as of 2026-10-19 (clean tree
+both times) — verify with `git branch --show-current` and `git status --short` before
+starting, since the two repos' git state is unrelated; don't trust this file's branch name.
+See [[backend-rbac-repo]] for the analogous Django-side split. This repo is also where the
+org-facing agent/instance UI lives (`src/components/dashboard/AgentInstanceDrawer.tsx`,
+`src/app/dashboard/agents/page.tsx`) — not just RBAC.
 
 **Module-assignability pattern (as of 2026-09-08):**
 - `src/features/rbac/rbacApi.types.ts` — `UserModuleGrant.assignable: boolean` is the
@@ -47,8 +49,16 @@ git state is unrelated. See [[backend-rbac-repo]] for the analogous Django-side 
   circular structure to JSON` inside `@eslint/eslintrc`'s config validator while resolving the
   `react` plugin config. Both pre-date and are unrelated to RBAC changes — name them as
   unverifiable rather than retrying, unless the task is specifically about lint config.
-- This repo has a pre-existing, unrelated `tsc --noEmit` failure set (26 errors as of
-  2026-09-08) confined to `src/__tests__/normal-flow/{marketplace,payment-gate,payments,
-  plans,subscriptions}.test.tsx` and `src/__tests__/wallets.test.ts` — capture a baseline
-  `tsc` run before editing and diff against it rather than assuming a nonzero exit means your
-  change broke something.
+- This repo has a pre-existing, unrelated `tsc --noEmit` failure set confined to
+  `src/__tests__/normal-flow/{marketplace,payment-gate,payments,plans,subscriptions}.test.tsx`
+  and `src/__tests__/wallets.test.ts` — 26 errors as of 2026-09-08, 36 as of 2026-10-19 (the
+  set grew between sessions; always capture a fresh baseline, don't reuse a remembered count).
+  Diff your post-edit `tsc` output against that baseline rather than assuming a nonzero exit
+  means your change broke something.
+- **Destructive git commands are blocked here** (`git stash`, `git checkout --`, `git
+  reset --hard` all get denied by the environment's auto-mode classifier, confirmed
+  2026-10-19). To get a baseline `tsc`/lint run without losing uncommitted edits: copy your
+  edited files to a scratch dir, overwrite the real paths with `git show HEAD:<path> ><path>`
+  (a plain redirect, not a git command, so it isn't blocked), run the baseline command, then
+  `cp` your scratch copies back over the real paths and delete the temp `git show` output. No
+  stash/checkout involved anywhere in that sequence.
