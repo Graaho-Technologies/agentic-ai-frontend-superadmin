@@ -65,12 +65,22 @@ files beyond this one swap.
 ### CI workflow
 
 - **`.github/workflows/deploy.yml`** — the `Resolve environment` step now also emits
-  `api_url` (from `vars.NEXT_PUBLIC_API_BASE_URL_PROD` / `_DEV` depending on branch) and
-  `app_env` (`prod` / `dev`) outputs, kept separate from the existing `overlay` output. The
-  `Build & push image` step guards `API_URL` (fails with `::error::` if empty, naming the
-  missing repo variable) and passes `--build-arg NEXT_PUBLIC_API_BASE_URL="$API_URL"` and
-  `--build-arg NEXT_PUBLIC_ENV="${{ steps.env.outputs.app_env }}"` to `docker build`. The ML/AI `ARG`s stay available in
-  the Dockerfile for later use; no GitHub repo variable was invented for them.
+  `api_url` and `app_env` (`prod` / `dev`) outputs, kept separate from the existing `overlay`
+  output. The `Build & push image` step guards `API_URL` (fails with `::error::` if empty) and
+  passes `--build-arg NEXT_PUBLIC_API_BASE_URL="$API_URL"` and
+  `--build-arg NEXT_PUBLIC_ENV="${{ steps.env.outputs.app_env }}"` to `docker build`. The ML/AI
+  `ARG`s stay available in the Dockerfile for later use; no GitHub repo variable was invented
+  for them.
+
+  `api_url` resolves as `${{ vars.NEXT_PUBLIC_API_BASE_URL_<ENV> || '<literal default>' }}` —
+  the per-branch default is written in the workflow, and a repository variable of that name
+  overrides it if one is ever set. **Revised mid-session:** the first version of this step read
+  the value *only* from a repository variable, which failed on the first push (run #5, the
+  `API_URL` guard firing exactly as designed) because nobody on this team has admin access to
+  add repository variables. Since `NEXT_PUBLIC_*` values are compiled into the client bundle and
+  served to every browser, they are public by construction, so committing them to the workflow
+  leaks nothing that the shipped JS does not already expose. See the matching `DECISIONS.md`
+  entry.
 
 ## Affected modules and behaviors
 
@@ -153,17 +163,21 @@ Run from the repo root unless noted:
   env vars, ConfigMap, Secret) has **no effect** on an already-compiled bundle — the values must
   be present when `docker build` runs `next build`, which is why this fix is build args, not
   runtime env injection.
-- **Two GitHub repository variables must exist** before this workflow can build successfully:
-  `NEXT_PUBLIC_API_BASE_URL_DEV` and `NEXT_PUBLIC_API_BASE_URL_PROD` (Settings → Secrets and
-  variables → Actions → Variables). Each value **must end with a trailing slash** — call sites
-  concatenate directly, e.g. `` `${BASE_URL}agent-templates/...` `` in
-  `src/components/subscription-model/plan/AgentComponentPricingManagement.tsx:119`. No real URL
-  is recorded here; use `<your dev api base url>` / `<your prod api base url>` as the values when
-  setting these up.
-- **Until those two variables exist, the workflow now fails fast by design** — the `API_URL`
-  guard in the `Build & push image` step raises a named `::error::` and exits before
-  `docker build` runs, rather than letting the build fail opaquely 15 steps deep inside
-  `next build`.
+- **No GitHub configuration is required to build.** The per-branch API base URL defaults are in
+  the workflow itself (`eks_dev` → the dev API host, `eks_prod` → the prod API host). Setting a
+  repository variable `NEXT_PUBLIC_API_BASE_URL_DEV` / `_PROD` overrides the default if someone
+  with admin access ever wants to move the value out of the repo; nothing breaks if they never do.
+- **Any API base URL value must end with a trailing slash**, whether it comes from the workflow
+  default or a repository variable — call sites concatenate directly, e.g.
+  `` `${BASE_URL}agent-templates/...` `` in
+  `src/components/subscription-model/plan/AgentComponentPricingManagement.tsx:119`. Drop the
+  slash and every such URL silently malforms.
+- **Changing which backend an environment points at is now a code change**, reviewed through a
+  PR to this workflow, rather than a settings edit invisible to git. That is a deliberate
+  trade: the team has no GitHub admin access, so a settings-only mechanism was unusable.
+- **The `API_URL` guard in `Build & push image` stays** as a safety net — it now only fires if
+  the workflow's own default is broken, and it raises a named `::error::` before `docker build`
+  runs rather than letting the failure surface deep inside `next build`.
 - **Any future RTK Query API in this repo that builds its own `fetchBaseQuery` must use
   `resolveBaseUrl`, never `getBaseUrl`, at module scope** — `getBaseUrl()` stays correct for
   call-time use (e.g. inside a function body that only runs client-side or server-side at

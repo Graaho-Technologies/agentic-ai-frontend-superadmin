@@ -26,7 +26,7 @@ jobs:
             echo "repo=super_admin_eks_ecr_repo_prod"  >> $GITHUB_OUTPUT
             echo "mbranch=eks_prod"                    >> $GITHUB_OUTPUT
             echo "role=koronik-gha-ecr-prod" >> $GITHUB_OUTPUT
-            echo "api_url=${{ vars.NEXT_PUBLIC_API_BASE_URL_PROD }}" >> $GITHUB_OUTPUT
+            echo "api_url=${{ vars.NEXT_PUBLIC_API_BASE_URL_PROD || 'https://prod-api.koronik.ai/api/v1/' }}" >> $GITHUB_OUTPUT
             echo "app_env=prod"                        >> $GITHUB_OUTPUT
           elif [ "${GITHUB_REF_NAME}" = "eks_dev" ]; then
             echo "region=us-east-1"                    >> $GITHUB_OUTPUT
@@ -34,7 +34,7 @@ jobs:
             echo "repo=super_admin_eks_ecr_repo_dev"   >> $GITHUB_OUTPUT
             echo "mbranch=eks_dev"                     >> $GITHUB_OUTPUT
             echo "role=koronik-gha-ecr-dev"  >> $GITHUB_OUTPUT
-            echo "api_url=${{ vars.NEXT_PUBLIC_API_BASE_URL_DEV }}" >> $GITHUB_OUTPUT
+            echo "api_url=${{ vars.NEXT_PUBLIC_API_BASE_URL_DEV || 'https://api-dev.koronik.ai/api/v1/' }}" >> $GITHUB_OUTPUT
             echo "app_env=dev"                         >> $GITHUB_OUTPUT
           else
             echo "Unsupported branch: ${GITHUB_REF_NAME}"; exit 1
@@ -56,7 +56,7 @@ jobs:
         run: |
           API_URL="${{ steps.env.outputs.api_url }}"
           if [ -z "$API_URL" ]; then
-            echo "::error::GitHub repo variable NEXT_PUBLIC_API_BASE_URL_${{ steps.env.outputs.overlay }} (uppercase) is not set. Add it under Settings -> Secrets and variables -> Actions -> Variables."
+            echo "::error::No API base URL resolved for branch ${GITHUB_REF_NAME}. Fix the api_url default in the 'Resolve environment' step above, or set the repo variable NEXT_PUBLIC_API_BASE_URL_DEV / NEXT_PUBLIC_API_BASE_URL_PROD to override it."
             exit 1
           fi
 

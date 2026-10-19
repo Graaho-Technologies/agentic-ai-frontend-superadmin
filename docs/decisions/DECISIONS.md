@@ -318,3 +318,32 @@ failing on a different, seemingly unrelated page.
 `.env`/`.env.*` into the image to work around the missing build args — `.dockerignore` correctly
 excludes them and that exclusion was not touched. Treating the bug as fixed after patching a
 single file without grepping for every other module-scope `getBaseUrl()` call site.
+
+---
+
+## 2026-10-19 — The per-environment API base URL lives in `deploy.yml`, not in a GitHub repository variable
+
+**Supersedes** the sourcing clause of the entry above (same day). The build-arg mechanism,
+the Dockerfile guard, and the `resolveBaseUrl()` rule all stand unchanged — only *where the
+value comes from* changed.
+
+**Decision.** `.github/workflows/deploy.yml` resolves `api_url` as
+`${{ vars.NEXT_PUBLIC_API_BASE_URL_<ENV> || '<literal default>' }}`: the per-branch default is
+committed in the workflow, and a repository variable of the same name overrides it if one is
+ever set. No GitHub configuration is required for a green build.
+
+**Why.** The variable-only version failed on first push (run #5) with the `API_URL` guard
+firing correctly — nobody on this team has admin access to create repository variables, so a
+settings-only mechanism is unusable here regardless of its merits. `NEXT_PUBLIC_*` values are
+inlined into the client bundle and served to every browser, so they are public by construction;
+committing them leaks nothing the shipped JS does not already expose. The values themselves were
+taken from this repo's own prior approved-command history and confirmed live before use
+(prod → HTTP 401 auth-required, dev → HTTP 503 backend down but DNS/TLS valid), not guessed.
+
+**Rules out.** Blocking a deploy on a GitHub settings change this team cannot make. Treating
+`NEXT_PUBLIC_*` values as secrets — they are not, and a `secrets.*` reference for them would be
+security theatre over a value already readable in the bundle. Removing the `vars.*` override or
+the `API_URL` guard: the override keeps the door open for an admin to externalize these later,
+and the guard still catches a broken default. Note the trade accepted: pointing an environment
+at a different backend is now a reviewed code change rather than an invisible settings edit —
+chosen deliberately, and it is the better audit story anyway.
