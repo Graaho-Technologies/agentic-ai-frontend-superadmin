@@ -6,16 +6,19 @@ import Image from 'next/image';
 import { User } from '@/types/auth';
 import SuperAdminCreateAgentTemplateDrawer from '@/components/SuperAdminAgentManagement/SuperAdminCreateAgentTemplateDrawer';
 import { AgentTemplate } from '@/features/agentTemplateApi/agentTemplateApi';
+import { Activity, BadgeDollarSign, Bot, BrainCircuit, Building, BuildingComplex, ChevronDown, ClipboardList, CreditCard, Database, Eye, FileText, Hourglass, LayoutDashboard, LayoutGrid, LayoutPanelTop, LayoutTemplate, ListChecks, LogIn, LogOut, Puzzle, Route, Settings, ShieldCheck, SlidersHorizontal, Timer, UserCog, Users } from 'lucide-react';
 
 // ─── All routes use /dashboard (no /super-admin prefix) ──────────────────────
 const BASE = '/dashboard';
 
 const NAV_ROUTES = {
   agentTemplates: `${BASE}/agent-templates`,
-  workspaces: `${BASE}/workspaces`,
   demoUsers: `${BASE}/demo-users`,
-  moduleAccess: `${BASE}/module-access`,
-  orgManagement: `${BASE}/org-management`,
+  orgManagement: {
+    agentConfig:  `${BASE}/org-management`,
+    moduleAccess: `${BASE}/module-access`,
+    workspaces:   `${BASE}/workspaces`,
+  },
   performanceAnalytics: {
     overview: `${BASE}/performance-analytics`,
     responseTime: `${BASE}/performance-analytics/response-time`,
@@ -42,6 +45,12 @@ const NAV_ROUTES = {
   },
 } as const;
 
+const ORG_MANAGEMENT_ROUTES = [
+  NAV_ROUTES.orgManagement.agentConfig,
+  NAV_ROUTES.orgManagement.moduleAccess,
+  NAV_ROUTES.orgManagement.workspaces,
+] as const;
+
 // ─── Context so child pages can open the Create Template drawer ───────────────
 export const DashboardContext = React.createContext<{
   openCreateTemplateDrawer: () => void;
@@ -64,6 +73,7 @@ export default function DashboardLayout({
   const [cmsSettingsOpen, setCmsSettingsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [performanceAnalyticsOpen, setPerformanceAnalyticsOpen] = useState(false);
+  const [orgManagementOpen, setOrgManagementOpen] = useState(false);
   const [isCreateTemplateDrawerOpen, setIsCreateTemplateDrawerOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<AgentTemplate | null>(null);
 
@@ -103,6 +113,7 @@ export default function DashboardLayout({
     setCmsSettingsOpen(pathname.startsWith(`${BASE}/cms-settings`));
     setSettingsOpen(pathname.startsWith(`${BASE}/settings`));
     setPerformanceAnalyticsOpen(pathname.startsWith(`${BASE}/performance-analytics`));
+    setOrgManagementOpen(ORG_MANAGEMENT_ROUTES.some((href) => pathname === href));
   }, [pathname]);
 
   const handleLogout = () => {
@@ -119,6 +130,7 @@ export default function DashboardLayout({
   // ── Styling helpers ───────────────────────────────────────────────────────
   const isActive = (href: string) => pathname === href;
   const isGroupActive = (prefix: string) => pathname.startsWith(prefix);
+  const orgManagementActive = ORG_MANAGEMENT_ROUTES.some((href) => pathname === href);
 
   const linkCls = (href: string) =>
     `w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left cursor-pointer transition-colors ${
@@ -127,12 +139,14 @@ export default function DashboardLayout({
         : 'text-gray-700 hover:bg-white/60'
     }`;
 
-  const groupBtnCls = (prefix: string) =>
+  const groupBtnClsFor = (active: boolean) =>
     `w-full flex items-center justify-between px-4 py-3 rounded-lg text-left cursor-pointer transition-all duration-300 ${
-      isGroupActive(prefix)
+      active
         ? 'bg-white text-[var(--color-primary-purple)] font-black shadow-md'
         : 'text-gray-700 hover:bg-white/60'
     }`;
+
+  const groupBtnCls = (prefix: string) => groupBtnClsFor(isGroupActive(prefix));
 
   // Inline submenu styles (accordion style - not absolute positioned)
   const submenuContainerCls = (open: boolean) =>
@@ -186,43 +200,53 @@ export default function DashboardLayout({
 
             {/* Agent Templates */}
             <Link href={NAV_ROUTES.agentTemplates} className={linkCls(NAV_ROUTES.agentTemplates)}>
-              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2M17 10H20C21.1 10 22 10.9 22 12V20C22 21.1 21.1 22 20 22H4C2.9 22 2 21.1 2 20V12C2 10.9 2.9 10 4 10H7V8C7 6.9 7.9 6 9 6H12.3C12.1 6.6 12 7.3 12 8V10H9C8.4 10 8 10.4 8 11V20H16V11C16 10.4 15.6 10 15 10H14V8C14 7.3 13.9 6.6 13.7 6H15C16.1 6 17 6.9 17 8V10M9.5 12C10.3 12 11 12.7 11 13.5C11 14.3 10.3 15 9.5 15C8.7 15 8 14.3 8 13.5C8 12.7 8.7 12 9.5 12M14.5 12C15.3 12 16 12.7 16 13.5C16 14.3 15.3 15 14.5 15C13.7 15 13 14.3 13 13.5C13 12.7 13.7 12 14.5 12M10 17H14C14 18.1 13.1 19 12 19C10.9 19 10 18.1 10 17Z"/>
-              </svg>
+              <LayoutTemplate className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
               <span className="font-medium">Agent Templates</span>
-            </Link>
-
-            {/* Workspaces */}
-            <Link href={NAV_ROUTES.workspaces} className={linkCls(NAV_ROUTES.workspaces)}>
-              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
-              </svg>
-              <span className="font-medium">Workspaces</span>
             </Link>
 
             {/* Demo Users */}
             <Link href={NAV_ROUTES.demoUsers} className={linkCls(NAV_ROUTES.demoUsers)}>
-              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-              </svg>
+              <Users className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
               <span className="font-medium">Demo Users</span>
             </Link>
 
-            {/* Module Access */}
-            <Link href={NAV_ROUTES.moduleAccess} className={linkCls(NAV_ROUTES.moduleAccess)}>
-              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1M10 17L6 13L7.41 11.59L10 14.17L16.59 7.58L18 9L10 17Z"/>
-              </svg>
-              <span className="font-medium">Module Access</span>
-            </Link>
-
             {/* Org Management */}
-            <Link href={NAV_ROUTES.orgManagement} className={linkCls(NAV_ROUTES.orgManagement)}>
-              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
-              </svg>
-              <span className="font-medium">Org Management</span>
-            </Link>
+            <div>
+              <button
+                onClick={() => setOrgManagementOpen((o) => !o)}
+                className={groupBtnClsFor(orgManagementActive)}
+              >
+                <div className="flex items-center space-x-3">
+                  <BuildingComplex className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
+                  <span className="font-medium">Org Management</span>
+                </div>
+                <ChevronDown
+                  className={`w-4 h-4 flex-shrink-0 transition-transform duration-300 ${orgManagementOpen ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                />
+              </button>
+
+              <div className={submenuContainerCls(orgManagementOpen)}>
+                <div className="py-1 space-y-0.5">
+                  {(
+                    [
+                      { href: NAV_ROUTES.orgManagement.agentConfig,  label: 'Agent Config',  Icon: SlidersHorizontal },
+                      { href: NAV_ROUTES.orgManagement.moduleAccess, label: 'Module Access', Icon: ShieldCheck },
+                      { href: NAV_ROUTES.orgManagement.workspaces,   label: 'Workspaces',    Icon: LayoutGrid },
+                    ] as const
+                  ).map(({ href, label, Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className={subLinkCls(href)}
+                    >
+                      <Icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                      <span className="text-sm">{label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             {/* Performance Analytics */}
             <div>
@@ -231,41 +255,36 @@ export default function DashboardLayout({
                 className={groupBtnCls(`${BASE}/performance-analytics`)}
               >
                 <div className="flex items-center space-x-3">
-                  <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/>
-                    <path d="M21 14h-2v4h-4v2h6z"/>
-                  </svg>
+                  <Activity className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                   <span className="font-medium">Performance Analytics</span>
                 </div>
-                <svg
+                <ChevronDown
                   className={`w-4 h-4 flex-shrink-0 transition-transform duration-300 ${performanceAnalyticsOpen ? 'rotate-180' : ''}`}
-                  fill="currentColor" viewBox="0 0 20 20"
-                >
-                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
+                  aria-hidden="true"
+                />
               </button>
 
               <div className={submenuContainerCls(performanceAnalyticsOpen)}>
                 <div className="py-1 space-y-0.5">
                   {(
                     [
-                      { href: NAV_ROUTES.performanceAnalytics.overview,        label: 'Overview Dashboard',     icon: '📊' },
-                      { href: NAV_ROUTES.performanceAnalytics.responseTime,    label: 'Response Time Analysis', icon: '⚡' },
-                      { href: NAV_ROUTES.performanceAnalytics.endpoints,       label: 'Endpoint Performance',   icon: '🔗' },
-                      { href: NAV_ROUTES.performanceAnalytics.slowRequests,    label: 'Slow Requests',          icon: '🐌' },
-                      { href: NAV_ROUTES.performanceAnalytics.statusCodes,     label: 'Status Codes',           icon: '📋' },
-                      { href: NAV_ROUTES.performanceAnalytics.databaseQueries, label: 'Database Queries',       icon: '🗄️' },
-                      { href: NAV_ROUTES.performanceAnalytics.organizations,   label: 'Organization Analytics', icon: '🏢' },
-                      { href: NAV_ROUTES.performanceAnalytics.agents,          label: 'Agent Analytics',        icon: '🤖' },
-                      { href: NAV_ROUTES.performanceAnalytics.mlAnalytics,     label: 'ML Server Analytics',    icon: '🧠' },
+                      { href: NAV_ROUTES.performanceAnalytics.overview,        label: 'Overview Dashboard',     Icon: LayoutDashboard },
+                      { href: NAV_ROUTES.performanceAnalytics.responseTime,    label: 'Response Time Analysis', Icon: Timer },
+                      { href: NAV_ROUTES.performanceAnalytics.endpoints,       label: 'Endpoint Performance',   Icon: Route },
+                      { href: NAV_ROUTES.performanceAnalytics.slowRequests,    label: 'Slow Requests',          Icon: Hourglass },
+                      { href: NAV_ROUTES.performanceAnalytics.statusCodes,     label: 'Status Codes',           Icon: ListChecks },
+                      { href: NAV_ROUTES.performanceAnalytics.databaseQueries, label: 'Database Queries',       Icon: Database },
+                      { href: NAV_ROUTES.performanceAnalytics.organizations,   label: 'Organization Analytics', Icon: Building },
+                      { href: NAV_ROUTES.performanceAnalytics.agents,          label: 'Agent Analytics',        Icon: Bot },
+                      { href: NAV_ROUTES.performanceAnalytics.mlAnalytics,     label: 'ML Server Analytics',    Icon: BrainCircuit },
                     ] as const
-                  ).map(({ href, label, icon }) => (
+                  ).map(({ href, label, Icon }) => (
                     <Link
                       key={href}
                       href={href}
                       className={subLinkCls(href)}
                     >
-                      <span className="text-sm">{icon}</span>
+                      <Icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                       <span className="text-sm">{label}</span>
                     </Link>
                   ))}
@@ -280,35 +299,31 @@ export default function DashboardLayout({
                 className={groupBtnCls(`${BASE}/subscription`)}
               >
                 <div className="flex items-center space-x-3">
-                  <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M20 4H4C2.89 4 2.01 4.89 2.01 6L2 18C2 19.11 2.89 20 4 20H20C21.11 20 22 19.11 22 18V6C22 4.89 21.11 4 20 4M20 18H4V12H20V18M20 8H4V6H20V8M14 14V16H18V14H14Z"/>
-                  </svg>
+                  <CreditCard className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                   <span className="font-medium">Subscription Model</span>
                 </div>
-                <svg
+                <ChevronDown
                   className={`w-4 h-4 flex-shrink-0 transition-transform duration-300 ${subscriptionOpen ? 'rotate-180' : ''}`}
-                  fill="currentColor" viewBox="0 0 20 20"
-                >
-                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
+                  aria-hidden="true"
+                />
               </button>
 
               <div className={submenuContainerCls(subscriptionOpen)}>
                 <div className="py-1 space-y-0.5">
                   {(
                     [
-                      { href: NAV_ROUTES.subscription.components,   label: 'Components',    icon: '🧩' },
-                      { href: NAV_ROUTES.subscription.agentPricing, label: 'Agent Pricing', icon: '💰' },
-                      { href: NAV_ROUTES.subscription.plans,        label: 'Plans',         icon: '📋' },
-                      { href: NAV_ROUTES.subscription.planPreview,  label: 'Plan Preview',  icon: '👁️' },
+                      { href: NAV_ROUTES.subscription.components,   label: 'Components',    Icon: Puzzle },
+                      { href: NAV_ROUTES.subscription.agentPricing, label: 'Agent Pricing', Icon: BadgeDollarSign },
+                      { href: NAV_ROUTES.subscription.plans,        label: 'Plans',         Icon: ClipboardList },
+                      { href: NAV_ROUTES.subscription.planPreview,  label: 'Plan Preview',  Icon: Eye },
                     ] as const
-                  ).map(({ href, label, icon }) => (
+                  ).map(({ href, label, Icon }) => (
                     <Link
                       key={href}
                       href={href}
                       className={subLinkCls(href)}
                     >
-                      <span className="text-sm">{icon}</span>
+                      <Icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                       <span className="text-sm">{label}</span>
                     </Link>
                   ))}
@@ -323,32 +338,28 @@ export default function DashboardLayout({
                 className={groupBtnCls(`${BASE}/cms-settings`)}
               >
                 <div className="flex items-center space-x-3">
-                  <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z"/>
-                  </svg>
+                  <LayoutPanelTop className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                   <span className="font-medium">CMS Settings</span>
                 </div>
-                <svg
+                <ChevronDown
                   className={`w-4 h-4 flex-shrink-0 transition-transform duration-300 ${cmsSettingsOpen ? 'rotate-180' : ''}`}
-                  fill="currentColor" viewBox="0 0 20 20"
-                >
-                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
+                  aria-hidden="true"
+                />
               </button>
 
               <div className={submenuContainerCls(cmsSettingsOpen)}>
                 <div className="py-1 space-y-0.5">
                   {(
                     [
-                      { href: NAV_ROUTES.cmsSettings.loginPage, label: 'Login Page', icon: '🔐' },
+                      { href: NAV_ROUTES.cmsSettings.loginPage, label: 'Login Page', Icon: LogIn },
                     ] as const
-                  ).map(({ href, label, icon }) => (
+                  ).map(({ href, label, Icon }) => (
                     <Link
                       key={href}
                       href={href}
                       className={subLinkCls(href)}
                     >
-                      <span className="text-sm">{icon}</span>
+                      <Icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                       <span className="text-sm">{label}</span>
                     </Link>
                   ))}
@@ -363,33 +374,29 @@ export default function DashboardLayout({
                 className={groupBtnCls(`${BASE}/settings`)}
               >
                 <div className="flex items-center space-x-3">
-                  <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 15.5A3.5 3.5 0 018.5 12 3.5 3.5 0 0112 8.5a3.5 3.5 0 013.5 3.5 3.5 3.5 0 01-3.5 3.5m7.43-2.92c.04-.33.07-.67.07-1s-.03-.67-.07-1l2.13-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.58-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.33-.07.67-.07 1s.03.67.07 1l-2.13 1.63c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66z"/>
-                  </svg>
+                  <Settings className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                   <span className="font-medium">Settings</span>
                 </div>
-                <svg
+                <ChevronDown
                   className={`w-4 h-4 flex-shrink-0 transition-transform duration-300 ${settingsOpen ? 'rotate-180' : ''}`}
-                  fill="currentColor" viewBox="0 0 20 20"
-                >
-                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
+                  aria-hidden="true"
+                />
               </button>
 
               <div className={submenuContainerCls(settingsOpen)}>
                 <div className="py-1 space-y-0.5">
                   {(
                     [
-                      { href: NAV_ROUTES.settings.manageUser, label: 'Manage User', icon: '👤' },
-                      { href: NAV_ROUTES.settings.summary,    label: 'Summary',     icon: '📑' },
+                      { href: NAV_ROUTES.settings.manageUser, label: 'Manage User', Icon: UserCog },
+                      { href: NAV_ROUTES.settings.summary,    label: 'Summary',     Icon: FileText },
                     ] as const
-                  ).map(({ href, label, icon }) => (
+                  ).map(({ href, label, Icon }) => (
                     <Link
                       key={href}
                       href={href}
                       className={subLinkCls(href)}
                     >
-                      <span className="text-sm">{icon}</span>
+                      <Icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                       <span className="text-sm">{label}</span>
                     </Link>
                   ))}
@@ -404,9 +411,7 @@ export default function DashboardLayout({
               onClick={handleLogout}
               className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left cursor-pointer transition-colors hover:bg-white/60 text-gray-700"
             >
-              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
-              </svg>
+              <LogOut className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
               <span className="font-medium">Logout</span>
             </button>
           </div>

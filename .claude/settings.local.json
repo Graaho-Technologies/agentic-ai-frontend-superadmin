@@ -74,7 +74,8 @@
       "Bash(npm install:*)",
       "WebFetch(domain:app-dev.koronik.ai)",
       "Bash(git fetch:*)",
-      "Bash(cd *)"
+      "Bash(cd *)",
+      "Bash(rm -f /tmp/build_out.log)"
     ]
   }
 }

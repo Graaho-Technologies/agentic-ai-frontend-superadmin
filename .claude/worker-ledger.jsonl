@@ -14,3 +14,7 @@
 {"at":"2026-10-13 14:51","agent":"implementer","result":"DONE","note":null,"session":"b3fb442e"}
 {"at":"2026-10-18 17:22","agent":"implementer","result":"DONE","note":null,"session":"227ac4af"}
 {"at":"2026-10-18 17:28","agent":"implementer","result":"DONE","note":null,"session":"227ac4af"}
+{"at":"2026-10-19 04:04","agent":"implementer","result":"BLOCKED","note":"The packet's root-cause diagnosis names only `src/lib/api/baseQueryWithAuth.ts` (2 call sites) as throwing `getBaseUrl()` at module scope. That's real and I fix","session":"4d1cc676"}
+{"at":"2026-10-19 04:09","agent":"implementer","result":"DONE","note":null,"session":"4d1cc676"}
+{"at":"2026-10-19 09:52","agent":"implementer","result":"DONE","note":null,"session":"4d1cc676"}
+{"at":"2026-10-19 10:05","agent":"implementer","result":"DONE","note":null,"session":"4d1cc676"}

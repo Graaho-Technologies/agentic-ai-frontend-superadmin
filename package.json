@@ -12,6 +12,7 @@
     "@aws-sdk/client-cognito-identity-provider": "^3.888.0",
     "@reduxjs/toolkit": "^2.8.2",
     "aws-amplify": "^6.15.5",
+    "lucide-react": "^1.59.0",
     "next": "15.4.6",
     "pdfjs-dist": "^5.4.54",
     "react": "19.1.0",
