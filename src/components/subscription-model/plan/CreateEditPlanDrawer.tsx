@@ -40,6 +40,9 @@ const CreateEditPlanDrawer: React.FC<CreateEditPlanDrawerProps> = ({
     billing_period: 'monthly' as 'monthly' | 'quarterly' | 'yearly',
     billing_mode: 'prepaid' as 'prepaid' | 'postpaid',
     grace_period_days: '7',
+    // Agent selection limits (0 = no minimum / unlimited)
+    min_agents_required: '0',
+    max_agents_allowed: '0',
     // NEW FIELDS
     cost_per_unit: '',
     promotion_code: '',
@@ -68,6 +71,9 @@ const CreateEditPlanDrawer: React.FC<CreateEditPlanDrawerProps> = ({
         billing_period: plan.billing_period,
         billing_mode: plan.billing_mode,
         grace_period_days: plan.grace_period_days?.toString() || '7',
+        // Agent selection limits — 0 is a real value (no minimum / unlimited), not "missing"
+        min_agents_required: (plan.min_agents_required ?? 0).toString(),
+        max_agents_allowed: (plan.max_agents_allowed ?? 0).toString(),
         // NEW FIELDS
         cost_per_unit: plan.cost_per_unit?.toString() || '',
         promotion_code: plan.promotion_code || '',
@@ -91,6 +97,8 @@ const CreateEditPlanDrawer: React.FC<CreateEditPlanDrawerProps> = ({
         billing_period: 'monthly',
         billing_mode: 'prepaid',
         grace_period_days: '7',
+        min_agents_required: '0',
+        max_agents_allowed: '0',
         cost_per_unit: '',
         promotion_code: '',
         promotion_valid_from: '',
@@ -120,6 +128,28 @@ const CreateEditPlanDrawer: React.FC<CreateEditPlanDrawerProps> = ({
 
     if (formData.grace_period_days && parseInt(formData.grace_period_days) < 0) {
       newErrors.grace_period_days = 'Grace period cannot be negative';
+    }
+
+    if (formData.min_agents_required !== '') {
+      const minAgentsVal = parseFloat(formData.min_agents_required);
+      if (!Number.isInteger(minAgentsVal) || minAgentsVal < 0) {
+        newErrors.min_agents_required = 'Minimum agents required must be a whole number of 0 or more';
+      }
+    }
+
+    if (formData.max_agents_allowed !== '') {
+      const maxAgentsVal = parseFloat(formData.max_agents_allowed);
+      if (!Number.isInteger(maxAgentsVal) || maxAgentsVal < 0) {
+        newErrors.max_agents_allowed = 'Maximum agents allowed must be a whole number of 0 or more';
+      }
+    }
+
+    if (!newErrors.min_agents_required && !newErrors.max_agents_allowed) {
+      const minAgentsNum = formData.min_agents_required ? parseInt(formData.min_agents_required, 10) : 0;
+      const maxAgentsNum = formData.max_agents_allowed ? parseInt(formData.max_agents_allowed, 10) : 0;
+      if (minAgentsNum > 0 && maxAgentsNum > 0 && maxAgentsNum < minAgentsNum) {
+        newErrors.max_agents_allowed = 'Maximum agents allowed must be greater than or equal to minimum agents required';
+      }
     }
 
     if (formData.cost_per_unit && parseFloat(formData.cost_per_unit) < 0) {
@@ -164,6 +194,9 @@ const CreateEditPlanDrawer: React.FC<CreateEditPlanDrawerProps> = ({
         billing_period: formData.billing_period,
         billing_mode: formData.billing_mode,
         grace_period_days: formData.grace_period_days ? parseInt(formData.grace_period_days) : 7,
+        // Agent selection limits
+        min_agents_required: formData.min_agents_required ? parseInt(formData.min_agents_required, 10) : 0,
+        max_agents_allowed: formData.max_agents_allowed ? parseInt(formData.max_agents_allowed, 10) : 0,
         // NEW FIELDS
         cost_per_unit: formData.cost_per_unit ? parseFloat(formData.cost_per_unit) : null,
         promotion_code: formData.promotion_code || null,
@@ -474,6 +507,57 @@ const CreateEditPlanDrawer: React.FC<CreateEditPlanDrawerProps> = ({
                   />
                   {errors.grace_period_days && <p className="mt-1 text-sm text-red-600">{errors.grace_period_days}</p>}
                   <p className="mt-1 text-xs text-gray-500">Days before suspension (for postpaid)</p>
+                </div>
+              </div>
+
+              {/* Agent Selection Limits */}
+              <div className="bg-white rounded-xl p-5 border border-gray-200 space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Agent Selection Limits</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Controls how many of the plan&apos;s linked agents a subscriber may use. Agents are linked to the plan after it is created.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Minimum agents required
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.min_agents_required}
+                      onChange={(e) => handleInputChange('min_agents_required', e.target.value)}
+                      disabled={isLoading}
+                      className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#4318ff]/20 focus:border-[#4318ff] transition-all duration-200 disabled:bg-gray-100 disabled:cursor-not-allowed ${
+                        errors.min_agents_required ? 'border-red-300' : 'border-gray-200'
+                      }`}
+                      placeholder="0"
+                    />
+                    {errors.min_agents_required && <p className="mt-1 text-sm text-red-600">{errors.min_agents_required}</p>}
+                    <p className="mt-1 text-xs text-gray-500">0 = no minimum</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Maximum agents allowed
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.max_agents_allowed}
+                      onChange={(e) => handleInputChange('max_agents_allowed', e.target.value)}
+                      disabled={isLoading}
+                      className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#4318ff]/20 focus:border-[#4318ff] transition-all duration-200 disabled:bg-gray-100 disabled:cursor-not-allowed ${
+                        errors.max_agents_allowed ? 'border-red-300' : 'border-gray-200'
+                      }`}
+                      placeholder="0"
+                    />
+                    {errors.max_agents_allowed && <p className="mt-1 text-sm text-red-600">{errors.max_agents_allowed}</p>}
+                    <p className="mt-1 text-xs text-gray-500">0 = unlimited</p>
+                  </div>
                 </div>
               </div>
 

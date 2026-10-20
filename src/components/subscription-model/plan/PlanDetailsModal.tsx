@@ -150,6 +150,25 @@ const PlanDetailsModal: React.FC<PlanDetailsModalProps> = ({ plan, onClose, onEd
             </div>
           )}
 
+          {/* Agent Selection Limits */}
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 mb-3">Agent Selection Limits</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white rounded-lg p-4 border border-gray-200">
+                <p className="text-xs text-gray-600 mb-1">Minimum Agents Required</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {plan.min_agents_required > 0 ? plan.min_agents_required : 'None'}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4 border border-gray-200">
+                <p className="text-xs text-gray-600 mb-1">Maximum Agents Allowed</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {plan.max_agents_allowed > 0 ? plan.max_agents_allowed : 'Unlimited'}
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Status */}
           <div>
             <h3 className="text-sm font-bold text-gray-900 mb-3">Status</h3>
