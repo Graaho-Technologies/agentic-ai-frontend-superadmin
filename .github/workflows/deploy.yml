@@ -34,7 +34,7 @@ jobs:
             echo "repo=super_admin_eks_ecr_repo_dev"   >> $GITHUB_OUTPUT
             echo "mbranch=eks_dev"                     >> $GITHUB_OUTPUT
             echo "role=koronik-gha-ecr-dev"  >> $GITHUB_OUTPUT
-            echo "api_url=${{ vars.NEXT_PUBLIC_API_BASE_URL_DEV || 'https://api-dev.koronik.ai/api/v1/' }}" >> $GITHUB_OUTPUT
+            echo "api_url=${{ vars.NEXT_PUBLIC_API_BASE_URL_DEV || 'https://api-eks-dev.koronik.ai/api/v1' }}" >> $GITHUB_OUTPUT
             echo "app_env=dev"                         >> $GITHUB_OUTPUT
           else
             echo "Unsupported branch: ${GITHUB_REF_NAME}"; exit 1
