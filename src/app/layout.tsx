@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { poppins } from "./fonts";
-// Importing AWS Amplify configurationn
+// Importing AWS Amplify configuration
 import { Amplify } from 'aws-amplify';
 import  amplifyConfig  from "@/aws-exports"
 import { ReduxProvider } from './providers/providers';
